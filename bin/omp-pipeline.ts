@@ -14,6 +14,7 @@
 
 import { readFileSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { parse as parseYaml } from "yaml";
 import { Parser, AstBuilder, GherkinClassicTokenMatcher, Errors } from "@cucumber/gherkin";
 
 /* ---- Gherkin AST 最小域类型(@cucumber/messages 结构的子集,深度为用到的字段) ---- */
@@ -280,16 +281,99 @@ function cmdCrapCheck(args: string[]): never {
   process.exit(0);
 }
 
+/** 机器级门禁工具的常见安装提示(仅提示;装不装由用户决定)。 */
+const INSTALL_HINTS: Record<string, string> = {
+  pytest: "pip3 install pytest",
+  mutmut: "pip3 install mutmut",
+  radon: "pip3 install radon",
+  coverage: "pip3 install coverage",
+  "lint-imports": "pip3 install import-linter",
+  bats: "apt install bats / brew install bats-core",
+  shellcheck: "apt install shellcheck / brew install shellcheck",
+  mvn: "apt install maven / sdk install maven",
+  "gherkin-utils": "bun add -g @cucumber/gherkin-utils",
+  "omp-pipeline": "omp plugin link <插件路径> && bun link",
+};
+
+interface GateEntry {
+  label: string;
+  cmd: string | null;
+}
+
+/** 读项目 quality.yml,展开为扁平门禁清单(命令模板含 {spec_path} 等占位,只取首 token 查工具)。 */
+function collectGates(root: Record<string, unknown>): GateEntry[] {
+  const gates: GateEntry[] = [];
+  const spec = root.spec;
+  if (asRecord(spec) && typeof spec.check === "string") gates.push({ label: "spec.check", cmd: spec.check });
+  const languages = root.languages;
+  if (asRecord(languages)) {
+    for (const [lang, body] of Object.entries(languages)) {
+      if (!asRecord(body)) continue;
+      for (const [gate, cmd] of Object.entries(body)) {
+        if (typeof cmd === "string") gates.push({ label: `${lang}.${gate}`, cmd });
+        else gates.push({ label: `${lang}.${gate}`, cmd: null }); // null=跳过
+      }
+    }
+  }
+  return gates;
+}
+
+function cmdDoctor(args: string[]): never {
+  const qPath = args[0] ?? ".omp/quality.yml";
+  let text: string;
+  try {
+    text = readFileSync(qPath, "utf8");
+  } catch (e) {
+    console.log(`[doctor] 读取失败: ${qPath} (${e instanceof Error ? e.message : String(e)})`);
+    process.exit(2);
+  }
+  let root: Record<string, unknown>;
+  try {
+    const parsed: unknown = parseYaml(text);
+    if (!asRecord(parsed)) throw new Error("quality.yml 顶层不是对象");
+    root = parsed;
+  } catch (e) {
+    console.log(`[doctor] quality.yml 解析失败: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(2);
+  }
+
+  let ok = 0, missing = 0, skipped = 0;
+  console.log(`[doctor] 读取 ${qPath}`);
+  for (const gate of collectGates(root)) {
+    if (gate.cmd === null) {
+      console.log(`[SKIP]     ${gate.label.padEnd(16)} (null,该门禁不启用)`);
+      skipped++;
+      continue;
+    }
+    const tool = gate.cmd.trim().split(/\s+/)[0];
+    const found = spawnSync("which", [tool], { encoding: "utf8" }).status === 0;
+    if (found) {
+      console.log(`[OK]       ${gate.label.padEnd(16)} ${tool}`);
+      ok++;
+    } else {
+      const hint = INSTALL_HINTS[tool] ?? "请安装该工具并加入 PATH";
+      console.log(`[MISSING]  ${gate.label.padEnd(16)} ${tool}   → ${hint}`);
+      missing++;
+    }
+  }
+  console.log(`[doctor] 结论: ${ok} 个工具在位, ${missing} 个缺失, ${skipped} 个跳过`);
+  if (missing > 0) process.exit(2); // 环境问题,主会话不应重试 agent,应装工具或把该门禁置 null
+  console.log("[doctor] 环境检查通过");
+  process.exit(0);
+}
+
 const cmd = process.argv[2] ?? "";
 if (cmd === "spec-check") cmdSpecCheck(process.argv.slice(3));
 else if (cmd === "crap-check") cmdCrapCheck(process.argv.slice(3));
+else if (cmd === "doctor") cmdDoctor(process.argv.slice(3));
 else {
   console.log(
     "omp-pipeline — 六-agent 流水线门禁 CLI\n" +
     "用法: omp-pipeline <子命令> [参数]\n" +
     "  spec-check <spec.feature> <qa-flow.md>   G0 规格门禁(L1语法+L2结构+qa-flow模板)\n" +
     "  crap-check [--threshold N] [paths...]     CRAP 组合器(radon+coverage)\n" +
-    "退出码: 0=通过 1=不合格 2=参数/依赖错误"
+    "  doctor [quality.yml路径]                  §5.1冒烟验证:按声明逐条查门禁工具在位性\n" +
+    "退出码: 0=通过 1=不合格 2=参数/依赖错误(环境问题)"
   );
   process.exit(2);
 }
