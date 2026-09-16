@@ -1,0 +1,25 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "omp-pipeline",
+      "dependencies": {
+        "@cucumber/gherkin": "^30.0.0",
+      },
+    },
+  },
+  "packages": {
+    "@cucumber/gherkin": ["@cucumber/gherkin@30.0.4", "https://registry.npmmirror.com/@cucumber/gherkin/-/gherkin-30.0.4.tgz", { "dependencies": { "@cucumber/messages": ">=19.1.4 <=26" } }, "sha512-pb7lmAJqweZRADTTsgnC3F5zbTh3nwOB1M83Q9ZPbUKMb3P76PzK6cTcPTJBHWy3l7isbigIv+BkDjaca6C8/g=="],
+
+    "@cucumber/messages": ["@cucumber/messages@26.0.1", "https://registry.npmmirror.com/@cucumber/messages/-/messages-26.0.1.tgz", { "dependencies": { "@types/uuid": "10.0.0", "class-transformer": "0.5.1", "reflect-metadata": "0.2.2", "uuid": "10.0.0" } }, "sha512-DIxSg+ZGariumO+Lq6bn4kOUIUET83A4umrnWmidjGFl8XxkBieUZtsmNbLYgH/gnsmP07EfxxdTr0hOchV1Sg=="],
+
+    "@types/uuid": ["@types/uuid@10.0.0", "https://registry.npmmirror.com/@types/uuid/-/uuid-10.0.0.tgz", {}, "sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ=="],
+
+    "class-transformer": ["class-transformer@0.5.1", "https://registry.npmmirror.com/class-transformer/-/class-transformer-0.5.1.tgz", {}, "sha512-SQa1Ws6hUbfC98vKGxZH3KFY0Y1lm5Zm0SY8XX9zbK7FJCyVEac3ATW0RIpwzW+oOfmHE5PMPufDG9hCfoEOMw=="],
+
+    "reflect-metadata": ["reflect-metadata@0.2.2", "https://registry.npmmirror.com/reflect-metadata/-/reflect-metadata-0.2.2.tgz", {}, "sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q=="],
+
+    "uuid": ["uuid@10.0.0", "https://registry.npmmirror.com/uuid/-/uuid-10.0.0.tgz", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ=="],
+  }
+}
