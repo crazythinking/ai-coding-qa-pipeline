@@ -233,10 +233,10 @@ languages:
     mutation: null      # 二期选型
   java:
     test: mvn -q test
-    complexity: mvn -q com.github.spotbugs:spotbugs-maven-plugin:check
+    complexity: mvn -q pmd:check   # PMD cyclomatic/NPath 真圈复杂度(替代 spotbugs——那是静态 bug 检测非复杂度)
     mutation: mvn -q org.pitest:pitest-maven:mutationCoverage -DwithHistory
     arch: mvn -q arch-unit
-  # 预留:typescript(stryker/dependency-cruiser)、go(gremlins/depguard)、rust(cargo-mutants)
+  # 已定:typescript(stryker/depcruise)、go(gremlins/depguard)、rust(cargo-mutants);完整命令表见 skills/pipeline-setup/references/lang-profiles.md
 ```
 
 **占位符约定**(§5.1 生成 quality.yml 时强制,命令不得写死具体文件路径——quality.yml 对所有 feature 稳定):
@@ -411,7 +411,7 @@ CRAP工具定位(不变,对照swarm-forge后,推翻原"量身定制"建议):
 | quality.yml缺失/失真 | 主会话探测→草稿→用户确认;命令执行失败即门禁失败;`ai-coding-qa-pipeline doctor`做初始化拦截 |
 | 运行环境缺门禁工具 | doctor按声明逐条检查(缺失给安装提示,或该语言该门禁置null);运行期门禁 exit=2=环境问题,主会话不重试agent,直接报环境 |
 | 插件自身依赖缺失 | 插件CLI(bun)起不来=环境错误;重跑`bun install`恢复;README记录安装三步 |
-| 非Python语言的complexity命令语义差异 | quality.yml按语言各自声明,CRAP仅Python强制;其他语言在yml中注明替代指标 |
+| 非Python语言的complexity命令语义差异 | quality.yml按语言各自声明;CRAP公式语言无关但插件仅实现Python数据源(§7),其他语言用各标准复杂度工具且语义等价(复杂度超阈即失败) |
 
 ## 9. 验收标准
 
