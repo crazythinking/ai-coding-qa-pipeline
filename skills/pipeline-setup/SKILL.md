@@ -12,7 +12,7 @@ description: Use when initializing ai-coding-qa-pipeline quality gates for a pro
 - 项目缺 `.omp/quality.yml`(首次接入;或编排流程第 1 步读到缺失时)
 - 已有 quality.yml,但使用过程中要新增语言依赖
 
-## 流程(设计文档 §5.1 协议)
+## 流程(quality.yml 初始化协议,本技能自包含,不依赖外部设计文档)
 
 ### 第 0 步 探测(只读,主会话亲自做)
 
@@ -40,6 +40,43 @@ description: Use when initializing ai-coding-qa-pipeline quality gates for a pro
 
 按问答结果生成 `.omp/quality.yml` 全文,展示给用户过目确认后才写入。
 
+生成时遵循**占位符约定**:命令一律用占位符表达"随 feature 变化"的量,**不得写死具体文件路径**——
+这样 quality.yml 对项目的所有 feature 稳定,只有每个 feature 实际改了哪些文件(由主会话从 git diff 计算)在跑门禁时注入。占位符:
+
+| 占位符 | 含义 | 由谁注入 |
+|---|---|---|
+| `{spec_path}` / `{qa_flow_path}` | 本次 spec-definer 产出的规格/QA流程路径 | 主会话从 spec-definer output 代入 |
+| `{diff_source_paths}` | 本次 feature diff 的源码文件(非测试) | 主会话执行门禁前从 `git diff` 计算 |
+| `{diff_test_paths}` | 本次 feature diff 的测试文件 | 同上 |
+
+**quality.yml 完整案例**(占位符版,分发用):
+
+```yaml
+scope: diff            # 门禁只对 diff 范围生效(由占位符注入)
+crap_threshold: 6      # Agent 标准(人类 4)
+coverage_target: 100
+architect_signal:      # architect 派发阈值(§6 触发信号)
+  new_files: 3         # 新建文件数≥3
+  modules_touched: 3   # 触碰顶层模块数≥3
+e2e: cli               # qa-runner 交互面: cli|http|playwright|null(null=G4跳过,终点G3)
+spec:                  # G0 规格门禁(主会话派发 spec-definer 后亲自跑)
+  check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}
+languages:
+  python:
+    test: pytest {diff_test_paths} -q
+    coverage: coverage run -m pytest {diff_test_paths}
+    complexity: ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}
+    mutation: mutmut run --paths-to-mutate={diff_source_paths}
+    arch: lint-imports
+  shell:
+    test: bats {diff_test_paths}
+    lint: shellcheck {diff_source_paths}
+    mutation: null      # 该语言不启用变异门禁 → reinforcer 跳过并上报 skipped_reason
+```
+
+- `{diff_source_paths}` / `{diff_test_paths}` 为空时(如 feature 只改了测试),对应门禁用整目录兜底或跳过,主会话决策并在报告中说明。
+- 命令首词必须是可在 PATH 找到的工具(doctor 按此校验在位性)。
+
 ### 第 3 步 冒烟验证
 
 运行 `ai-coding-qa-pipeline doctor`(逐条查每条非 null 命令的工具在位性):
@@ -57,3 +94,6 @@ description: Use when initializing ai-coding-qa-pipeline quality gates for a pro
 - quality.yml 是门禁唯一事实源,agent 不猜测
 - 产物纳入版本管理(quality.yml 应进 git)
 - 确定性优先:命令必须在位、可两路实测(好 exit=0 / 坏 exit≠0)才准入
+- **分发自包含**:本技能作为插件分发时,用户机器上没有设计文档——协议、quality.yml 完整案例、
+  占位符约定等一切约定必须直接写在本技能内,禁止"见设计文档 §X"式引用。命令一律用占位符,
+  不写死具体 feature 文件路径。
