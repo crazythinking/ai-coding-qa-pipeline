@@ -233,7 +233,7 @@ languages:
     mutation: null      # 二期选型
   java:
     test: mvn -q test
-    complexity: mvn -q pmd:check   # PMD cyclomatic/NPath 真圈复杂度(替代 spotbugs——那是静态 bug 检测非复杂度)
+    complexity: mvn -q pmd:check   # PMD cyclomatic/NPath 真圈复杂度(ruleset 用 pipeline-setup templates/pmd-ruleset.xml 落地;spotbugs 是静态 bug 检测非复杂度)
     mutation: mvn -q org.pitest:pitest-maven:mutationCoverage -DwithHistory
     arch: mvn -q arch-unit
   # 已定:typescript(stryker/depcruise)、go(gremlins/depguard)、rust(cargo-mutants);完整命令表见 skills/pipeline-setup/references/lang-profiles.md
@@ -275,7 +275,8 @@ languages:
 第1步 问答(每题给推荐默认值,用户可回车采纳):
   Q1 本项目启用哪些语言?(候选清单多选)
   Q2 各语言的测试命令?(给出探测到的候选,如"pytest {diff_test_paths} -q";无测试目录则问是否约定)
-  Q3 架构约束命令?(有契约文件→直接采用;没有→问是否初始化,Python推荐import-linter模板)
+  Q3 架构约束命令?(有契约文件→直接采用;没有→问是否初始化,Python推荐从
+     skills/pipeline-setup/references/templates/import-linter-setup.cfg 落地契约,java 用 pmd-ruleset.xml)
   Q4 变异测试工具?(Python推荐mutmut;无对应工具的语言默认null并告知后果=G3跳过)
   Q5 端到端验证交互面?(决定e2e声明:cli|http|playwright|null;运维脚本类项目推荐cli,
      无系统级验证面选null=G4跳过)
@@ -373,6 +374,7 @@ ai-coding-qa-pipeline/(独立插件项目,~/apps/ai-coding-qa-pipeline)
 │   └── doctor [quality.yml]        # §5.1冒烟验证命令化:按声明查门禁工具在位性(缺失给安装提示/缺配置引导)
 ├── skills/                   # 技能,随插件分发(/extensions 可审计)
 │   ├── pipeline-setup/       #   初始化质量配置向导(§5.1),含 references/lang-profiles.md 建议表
+│   │   └── references/templates/  #  门禁模板(PMD ruleset、import-linter 契约),生成时按语言落地
 │   ├── orchestrator-playbook/ #  主会话编排协议(§6):占位符注入 + pipeline-state 读写/恢复(ADR-0001)
 │   ├── coder-playbook/       #   执行 agent 的操作型 playbook
 │   ├── cleaner-playbook/

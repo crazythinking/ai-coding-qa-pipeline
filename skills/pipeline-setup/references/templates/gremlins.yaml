@@ -1,0 +1,14 @@
+# ai-coding-qa-pipeline 突变测试模板(gremlins,由 pipeline-setup 落地)。
+# 命令: gremlins(缺配置即空跑/报错;基于覆盖文件计算待变异包)。
+# 用法: 先跑 go test -coverprofile=coverage.out ./...,再 go tool cover -html=coverage.out(可选),gremlins 直接运行。
+# 替换 <module> 为 go.mod 的模块路径前缀。
+allowlist:
+  - "<module>/internal/application"
+  - "<module>/internal/domain"
+blocklist: []
+env: {}
+exclude: []
+build: {}
+tags:
+  enabled: ["increment"]
+  blocked_modules: []

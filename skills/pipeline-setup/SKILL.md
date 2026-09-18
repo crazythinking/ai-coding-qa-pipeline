@@ -74,8 +74,42 @@ languages:
     mutation: null      # 该语言不启用变异门禁 → reinforcer 跳过并上报 skipped_reason
 ```
 
-- `{diff_source_paths}` / `{diff_test_paths}` 为空时(如 feature 只改了测试),对应门禁用整目录兜底或跳过,主会话决策并在报告中说明。
+- `{diff_source_paths}` / `{diff_test_paths}` 为空时(如 feature 只改测试),对应门禁用整目录兜底或跳过,主会话决策并在报告中说明。
 - 命令首词必须是可在 PATH 找到的工具(doctor 按此校验在位性)。
+
+**落地门禁模板文件**(被选语言的门禁命令依赖的项目侧前置,与 quality.yml 一并落盘):
+
+模板位于本技能 `references/templates/`(随插件分发,自包含):
+
+| 模板 | 目标语言 | 落地位置 | 用途 |
+|---|---|---|---|
+| `pmd-ruleset.xml` | java | `.pmd/ruleset.xml` | `mvn -q pmd:check` 需此 ruleset(cyclomatic/NPath 阈值);pom 需配 maven-pmd-plugin 指向(侧置,引导) |
+| `import-linter-setup.cfg` | python | `setup.cfg`(合并 `[tool:importlinter]`) | `lint-imports` 需契约;替换 `<pkg>` |
+| `stryker.conf.js` | typescript | `stryker.conf.js` | `stryker run` 需此配置;替换 `src/**` 与 testRunner |
+| `dependency-cruiser.js` | typescript | `.dependency-cruiser.js` | `depcruise` 需此配置;规则按项目调整 |
+| `gremlins.yaml` | go | `.gremlins.yaml` | `gremlins` 需此配置;替换 `<module>` |
+| `depguard.yml` | go | `.depguard.yml` | `depguard` 需此配置;`<module>` 按 go.mod |
+| `jacoco-pitest-pom.xml` | java | pom.xml 合并 `<build><plugins>` | jacoco+pitest 插件片段(check 阈值 100%);**用户确认后**合并 |
+| `arch-unit-test.java` | java | `src/test/java/<pkg>/architecture/` | ArchUnit 结构测试骨架;**用户确认后**落地 |
+
+按问答确认的语言落地对应模板;已验证存在契约/ruleset 的项目**不覆盖**(采用其既有文件)。模板内 `<pkg>` 等占位符按项目替换。
+
+### 第 2.5 步 遗漏侦测与引导(B 类前置)
+
+对照 `references/lang-profiles.md` 的"门禁前置要求"表,逐条核对被选语言命令的项目侧前置是否**存在、完整、准确**。
+对缺失/不完整/不准确的条目,**告知用户该门禁的后果**,然后**询问是否由 pipeline-setup 帮助生成**——不静默跳过,也不擅自替用户写。
+
+判定口径(按上表"由谁补"列):
+
+- **A 类(纯配置文件)**:缺 → 落 `references/templates/` 对应模板(第 2 步已做)。
+- **B 类(项目搭建)**——本步重点,逐条提示 + 询问,生成物见模板表(jacoco-pitest-pom.xml / arch-unit-test.java):
+  - java `jacoco:check`:pom 无 jacoco 插件/rules → 告知"覆盖率门禁跑不出数据,等于跳过 G1 覆盖率复验",问是否生成 `jacoco-pitest-pom.xml` 的 jacoco 片段。
+  - java `pitest`:pom 无 pitest 插件 → 告知"变异门禁空转,reinforcer 无意义通过",问是否生成该片段的 pitest 部分。
+  - java `arch-unit`:项目无 ArchUnit 测试类 → 告知"结构门禁零断言,形同虚设",问是否生成 `arch-unit-test.java` 骨架(pom 需 archunit-junit5,一并提示)。
+  - ts `vitest --coverage`:缺 `@vitest/coverage-v8` → 告知"覆盖率命令启动即报错;doctor 查命令首词查不到 npm 包,属环境问题",给出 `npm i -D @vitest/coverage-v8` 提示(不代跑安装)。
+- **C 类(无需配置)**:gocyclo/cargo-mutants/clippy/shellcheck/bats → 跳过。
+
+用户选择"生成"→ 落地对应文件(模板/片段/骨架)并**纳入问答确认清单**;选"不生成"→ 记录为已知缺口,由用户后续自行补齐,并在 quality.yml 对应命令留待其配置。**禁止静默假设已配好。**
 
 ### 第 3 步 冒烟验证
 

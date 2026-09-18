@@ -1,0 +1,18 @@
+# ai-coding-qa-pipeline 依赖约束模板(depguard,由 pipeline-setup 落地)。
+# 命令: depguard {diff_source_paths}(enforce 恶意的/不确定的导入,防循环与分层违约)。
+# 兼容 orthros 风格 depguard(v1 check 子命令参数见注释)。
+import:
+  # 主 import 设置的默认规则(优先级低于 list)
+  rules:
+    - name: main
+      deny:
+        - pkg: "github.com/golang/protobuf"
+          desc: "deprecated, use google.golang.org/protobuf"
+list:
+  - name: app
+    files:
+      - "**/application/**"
+    allow:
+      - "$gostd"
+      - "$dot"
+      - "<module>/domain"

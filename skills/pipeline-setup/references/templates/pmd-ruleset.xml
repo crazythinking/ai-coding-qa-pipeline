@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<ruleset name="ai-coding-qa-pipeline-complexity"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>
+    ai-coding-qa-pipeline 复杂度门禁 ruleset(由 pipeline-setup 落地)。
+    启用圈复杂度与 NPath 复杂度,阈值映射 quality.yml 的复杂度目标(默认与 crap_threshold 一致)。
+    命令: mvn -q pmd:check(Maven 侧需配置 maven-pmd-plugin 指向本文件)。
+  </description>
+
+  <!-- CyclomaticComplexity:每方法圈复杂度上限(阈值 = quality.yml 复杂度目标,默认 10 actionable 上限) -->
+  <rule ref="category/java/design.xml/CyclomaticComplexity">
+    <properties>
+      <property name="reportLevel" value="10"/>
+    </properties>
+  </rule>
+
+  <!-- NPathComplexity:每方法 NPath 复杂度(路径数膨胀检测,捕获嵌套过深) -->
+  <rule ref="category/java/design.xml/NPathComplexity">
+    <properties>
+      <property name="reportLevel" value="200"/>
+    </properties>
+  </rule>
+</ruleset>
