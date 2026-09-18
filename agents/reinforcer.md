@@ -1,6 +1,7 @@
 ---
 name: reinforcer
 description: 通过变异测试验证测试有效性,补齐盲区。在cleaner(或architect)完成后使用。
+autoload-skills: [reinforcer-playbook]
 model: "@default"
 tools: read, write, edit, bash, grep, glob
 blocking: true

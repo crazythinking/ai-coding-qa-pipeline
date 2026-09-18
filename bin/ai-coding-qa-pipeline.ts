@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * omp-pipeline — 六-agent 开发流水线的可分发门禁 CLI。
+ * ai-coding-qa-pipeline — 六-agent 开发流水线的可分发门禁 CLI。
  *
  * 子命令:
  *   spec-check <spec.feature> <qa-flow.md>   G0 门禁:L1 语法(官方 @cucumber/gherkin)
@@ -180,7 +180,7 @@ function checkQaFlow(path: string): string[] {
 
 function cmdSpecCheck(args: string[]): never {
   if (args.length !== 2) {
-    console.log("用法: omp-pipeline spec-check <spec.feature> <qa-flow.md>");
+    console.log("用法: ai-coding-qa-pipeline spec-check <spec.feature> <qa-flow.md>");
     process.exit(2);
   }
   const [specPath, qaPath] = args;
@@ -219,7 +219,7 @@ function cmdCrapCheck(args: string[]): never {
     else paths.push(args[i]);
   }
   if (!Number.isFinite(threshold)) {
-    console.log("用法: omp-pipeline crap-check [--threshold N] [paths...]");
+    console.log("用法: ai-coding-qa-pipeline crap-check [--threshold N] [paths...]");
     process.exit(2);
   }
   const dirs = paths.length ? paths : ["lib", "scripts"];
@@ -292,7 +292,7 @@ const INSTALL_HINTS: Record<string, string> = {
   shellcheck: "apt install shellcheck / brew install shellcheck",
   mvn: "apt install maven / sdk install maven",
   "gherkin-utils": "bun add -g @cucumber/gherkin-utils",
-  "omp-pipeline": "omp plugin link <插件路径> && bun link",
+  "ai-coding-qa-pipeline": "omp plugin link <插件路径> && bun link",
 };
 
 interface GateEntry {
@@ -324,6 +324,12 @@ function cmdDoctor(args: string[]): never {
   try {
     text = readFileSync(qPath, "utf8");
   } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") {
+      console.log(`[doctor] 未找到质量配置: ${qPath}`);
+      console.log('[doctor] 项目尚未接入流水线。请在 omp 会话中对主会话说"初始化质量配置",触发 pipeline-setup 技能生成 .omp/quality.yml;已有项目新增语言门禁同理。');
+      process.exit(2);
+    }
     console.log(`[doctor] 读取失败: ${qPath} (${e instanceof Error ? e.message : String(e)})`);
     process.exit(2);
   }
@@ -368,8 +374,8 @@ else if (cmd === "crap-check") cmdCrapCheck(process.argv.slice(3));
 else if (cmd === "doctor") cmdDoctor(process.argv.slice(3));
 else {
   console.log(
-    "omp-pipeline — 六-agent 流水线门禁 CLI\n" +
-    "用法: omp-pipeline <子命令> [参数]\n" +
+    "ai-coding-qa-pipeline — 六-agent 流水线门禁 CLI\n" +
+    "用法: ai-coding-qa-pipeline <子命令> [参数]\n" +
     "  spec-check <spec.feature> <qa-flow.md>   G0 规格门禁(L1语法+L2结构+qa-flow模板)\n" +
     "  crap-check [--threshold N] [paths...]     CRAP 组合器(radon+coverage)\n" +
     "  doctor [quality.yml路径]                  §5.1冒烟验证:按声明逐条查门禁工具在位性\n" +

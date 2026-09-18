@@ -1,17 +1,17 @@
 {
-  "name": "omp-pipeline",
+  "name": "ai-coding-qa-pipeline",
   "version": "0.1.0",
   "description": "omp 六-agent 开发流水线的可分发组件:agent 定义 + 门禁 CLI(spec-check / crap-check)",
   "type": "module",
   "bin": {
-    "omp-pipeline": "bin/omp-pipeline.ts"
+    "ai-coding-qa-pipeline": "bin/ai-coding-qa-pipeline.ts"
   },
   "dependencies": {
     "@cucumber/gherkin": "^30.0.0",
     "yaml": "^2.9.1"
   },
   "omp": {
-    "name": "omp-pipeline",
+    "name": "ai-coding-qa-pipeline",
     "description": "六-agent 开发流水线 agent 定义与门禁工具"
   }
 }

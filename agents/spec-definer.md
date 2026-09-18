@@ -18,7 +18,7 @@ output:
 只描述行为和预期结果,不写任何实现细节(不提数据库、API、组件)。
 输出目录:.scratch/<feature>/
 
-qa-flow.md 固定模板(校验器 omp-pipeline spec-check 按此结构检查,必须一字不差):
+qa-flow.md 固定模板(校验器 ai-coding-qa-pipeline spec-check 按此结构检查,必须一字不差):
   # QA 流程:<功能名>
   ## 前置条件
   - <前置条件项,每项一行>
@@ -27,6 +27,16 @@ qa-flow.md 固定模板(校验器 omp-pipeline spec-check 按此结构检查,必
   |---|---|---|
   | 1 | <操作> | <预期结果> |
   步骤序号从1递增;每个操作和预期两列都不得为空。
+
+spec.feature 骨架(受 spec-check 门禁结构校验;场景按需求编写,此为最小结构样例):
+  # language: zh-CN
+  功能: <功能名>
+    场景: <场景名>
+      假如 <前置条件>
+      当 <操作>
+      那么 <预期结果>
+  每场景恰好三步家族:假如(Given/前置)、当(When/操作)、那么(Then/预期);
+  可多场景,也可用"场景大纲";文件头 # language 必须与关键字一致。
 
 完成标准(自检,全部满足才写output):
 1. spec.feature 文件头声明语言(# language: zh-CN 或 en,与关键字一致)

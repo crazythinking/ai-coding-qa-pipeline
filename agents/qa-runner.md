@@ -1,6 +1,7 @@
 ---
 name: qa-runner
 description: 将QA流程文档转为可执行端到端验证并运行,从真实使用者视角证明系统整体行为正确。仅当quality.yml声明e2e交互面(非null)时使用。
+autoload-skills: [qa-runner-playbook]
 model: "@default"
 tools: read, write, edit, bash, grep, glob
 blocking: true

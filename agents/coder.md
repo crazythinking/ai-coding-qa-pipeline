@@ -1,6 +1,7 @@
 ---
 name: coder
 description: 根据Gherkin规格实现功能代码和单元测试,直到门禁全绿。在规格已确认后使用。
+autoload-skills: [coder-playbook]
 model: "@default"
 tools: read, write, edit, bash, grep, glob
 blocking: true

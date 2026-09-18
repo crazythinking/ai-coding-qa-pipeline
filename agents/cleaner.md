@@ -1,6 +1,7 @@
 ---
 name: cleaner
 description: 运行CRAP复杂度分析并重构超标函数。在coder完成后使用。
+autoload-skills: [cleaner-playbook]
 model: "@slow"
 tools: read, write, edit, bash, grep, glob
 blocking: true
