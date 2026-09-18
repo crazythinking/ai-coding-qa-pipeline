@@ -7,12 +7,15 @@
  *                                              + L2 结构(每场景三类步骤)+ qa-flow 固定模板
  *   crap-check [--threshold N] [paths...]     CRAP 组合器:radon cc + coverage json → CRAP 公式
  *                                               (不自造分析,复杂度完全由 radon 承担)
+ *   doctor [quality.yml路径]                  §5.1冒烟验证:按声明逐条查门禁工具在位性
+ *   pipeline-state read|update <json> [内容]  ADR-0001 编排状态读写:环间恢复+审计,带 schema 校验
  *
  * 退出码: 0 = 通过; 1 = 不合格; 2 = 参数错误/依赖工具不可用/输出解析失败。
  * 设计依据: docs/omp-profile-agents-design.md §3①/§5(quality.yml 中 {spec_path}/{qa_flow_path} 由主会话代入)。
  */
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse as parseYaml } from "yaml";
 import { Parser, AstBuilder, GherkinClassicTokenMatcher, Errors } from "@cucumber/gherkin";
@@ -370,10 +373,109 @@ function cmdDoctor(args: string[]): never {
   process.exit(0);
 }
 
+/** pipeline-state:读/写 `.scratch/<feature>/pipeline-state.json` 编排状态(ADR-0001)。
+ *  恢复粒度=环间续跑;schema 校验防主会话手写漂移;机读 JSON 亦人类可读=审计轨迹。 */
+const REQUIRED_STATE_FIELDS = ["feature", "current_ring", "completed_rings"] as const;
+const STRING_FIELDS = ["feature", "feature_name", "requirement", "current_ring"] as const;
+
+function asStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
+}
+
+/** 校验状态对象形状,返回缺字段/错类型清单;合法返回 []。 */
+function validateState(root: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  for (const f of REQUIRED_STATE_FIELDS) {
+    if (typeof root[f] !== "string" && !(f === "completed_rings" && asStringArray(root[f]))) {
+      problems.push(`缺少必填字段或类型错误: ${f}`);
+    }
+  }
+  for (const f of STRING_FIELDS) {
+    if (root[f] !== undefined && typeof root[f] !== "string") problems.push(`字段类型应为 string: ${f}`);
+  }
+  if (root.completed_rings !== undefined && !asStringArray(root.completed_rings)) {
+    problems.push("字段 completed_rings 应为 string[]");
+  }
+  if (root.backprop_budget_left !== undefined && typeof root.backprop_budget_left !== "number") {
+    problems.push("字段 backprop_budget_left 应为 number");
+  }
+  if (root.gates !== undefined && !asRecord(root.gates)) problems.push("字段 gates 应为对象");
+  if (root.paths !== undefined && !asRecord(root.paths)) problems.push("字段 paths 应为对象");
+  if (root.skipped !== undefined && !asRecord(root.skipped)) problems.push("字段 skipped 应为对象");
+  return problems;
+}
+
+function cmdPipelineState(args: string[]): never {
+  const [op, statePath] = args;
+  if (op === "read") {
+    if (!statePath) {
+      console.log("用法: ai-coding-qa-pipeline pipeline-state read <state.json路径>");
+      process.exit(2);
+    }
+    let text: string;
+    try {
+      text = readFileSync(statePath, "utf8");
+    } catch {
+      // 无状态文件 = 尚未开始/已清理,输出空对象供恢复方区分"无状态"与"已完成"
+      console.log("{}");
+      process.exit(0);
+    }
+    let root: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (!asRecord(parsed)) throw new Error("顶层不是对象");
+      root = parsed;
+    } catch (e) {
+      console.error(`[pipeline-state] 解析失败: ${statePath} (${e instanceof Error ? e.message : String(e)})`);
+      process.exit(2);
+    }
+    const problems = validateState(root);
+    if (problems.length) {
+      console.error(`[pipeline-state] schema 非法: ${problems.join("; ")}`);
+      process.exit(2);
+    }
+    console.log(JSON.stringify(root, null, 2));
+    process.exit(0);
+  }
+  if (op === "update") {
+    if (args.length < 3) {
+      console.log("用法: ai-coding-qa-pipeline pipeline-state update <state.json路径> <json>");
+      process.exit(2);
+    }
+    const json = args.slice(2).join(" ");
+    let next: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(json);
+      if (!asRecord(parsed)) throw new Error("顶层不是对象");
+      next = parsed;
+    } catch (e) {
+      console.error(`[pipeline-state] JSON 无效: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(2);
+    }
+    const problems = validateState(next);
+    if (problems.length) {
+      console.error(`[pipeline-state] schema 非法: ${problems.join("; ")}`);
+      process.exit(2);
+    }
+    try {
+      mkdirSync(dirname(statePath), { recursive: true });
+      writeFileSync(statePath, JSON.stringify(next, null, 2) + "\n", "utf8");
+    } catch (e) {
+      console.error(`[pipeline-state] 写入失败: ${statePath} (${e instanceof Error ? e.message : String(e)})`);
+      process.exit(2);
+    }
+    console.log("[pipeline-state] 状态已写入");
+    process.exit(0);
+  }
+  console.log("用法: ai-coding-qa-pipeline pipeline-state read|update <state.json路径> [json]");
+  process.exit(2);
+}
+
 const cmd = process.argv[2] ?? "";
 if (cmd === "spec-check") cmdSpecCheck(process.argv.slice(3));
 else if (cmd === "crap-check") cmdCrapCheck(process.argv.slice(3));
 else if (cmd === "doctor") cmdDoctor(process.argv.slice(3));
+else if (cmd === "pipeline-state") cmdPipelineState(process.argv.slice(3));
 else {
   console.log(
     "ai-coding-qa-pipeline — 六-agent 流水线门禁 CLI\n" +
@@ -381,6 +483,8 @@ else {
     "  spec-check <spec.feature> <qa-flow.md>   G0 规格门禁(L1语法+L2结构+qa-flow模板)\n" +
     "  crap-check [--threshold N] [paths...]     CRAP 组合器(radon+coverage)\n" +
     "  doctor [quality.yml路径]                  §5.1冒烟验证:按声明逐条查门禁工具在位性\n" +
+    "  pipeline-state read|update <state.json> [json]\n" +
+    "                                           编排状态读/写(ADR-0001,环间恢复+审计)\n" +
     "退出码: 0=通过 1=不合格 2=参数/依赖错误(环境问题)"
   );
   process.exit(2);

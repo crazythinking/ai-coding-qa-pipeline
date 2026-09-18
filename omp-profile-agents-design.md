@@ -211,7 +211,7 @@ blocking: true
 
 ```yaml
 # 每个项目自声明;未声明的项目走§5.1问答式初始化协议
-scope: diff            # 门禁只对diff范围生效
+scope: diff            # 门禁只对diff范围生效(由占位符注入,见下)
 crap_threshold: 6      # Agent标准(人类4)
 coverage_target: 100
 architect_signal:      # architect派发阈值(§6触发信号)
@@ -222,14 +222,14 @@ spec:                  # G0规格门禁(spec-definer产出,主会话派发后、
   check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}   # 插件CLI,全局可用:L1+L2+qa-flow模板
 languages:
   python:
-    test: pytest tests/ -q
-    coverage: pytest --cov=. --cov-report=term-missing
-    complexity: ai-coding-qa-pipeline crap-check --threshold 6   # 插件组合器,不自造分析(见§7)
-    mutation: mutmut run
+    test: pytest {diff_test_paths} -q            # 占位符见下方约定;主会话执行前从git diff注入
+    coverage: coverage run -m pytest {diff_test_paths}
+    complexity: ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}   # 插件组合器(见§7)
+    mutation: mutmut run --paths-to-mutate={diff_source_paths}
     arch: lint-imports
   shell:
-    test: bats tests/
-    lint: shellcheck scripts/
+    test: bats {diff_test_paths}
+    lint: shellcheck {diff_source_paths}
     mutation: null      # 二期选型
   java:
     test: mvn -q test
@@ -238,6 +238,17 @@ languages:
     arch: mvn -q arch-unit
   # 预留:typescript(stryker/dependency-cruiser)、go(gremlins/depguard)、rust(cargo-mutants)
 ```
+
+**占位符约定**(§5.1 生成 quality.yml 时强制,命令不得写死具体文件路径——quality.yml 对所有 feature 稳定):
+
+| 占位符 | 含义 | 注入者 |
+|---|---|---|
+| `{spec_path}` / `{qa_flow_path}` | 本次 spec-definer 产出的规格/QA流程路径 | 主会话从 spec-definer output 代入 |
+| `{diff_source_paths}` | 本次 feature diff 的源码文件(非测试) | 主会话执行门禁前从 `git diff` 计算代入 |
+| `{diff_test_paths}` | 本次 feature diff 的测试文件 | 同上 |
+
+占位符集为空时(如 feature 只改测试):该门禁用整目录兜底或跳过,主会话决策并在报告中说明。
+命令首词须为 PATH 可寻工具(doctor 按此校验在位性)。
 
 规则:
 
@@ -263,7 +274,7 @@ languages:
 
 第1步 问答(每题给推荐默认值,用户可回车采纳):
   Q1 本项目启用哪些语言?(候选清单多选)
-  Q2 各语言的测试命令?(给出探测到的候选,如"pytest tests/ -q";无测试目录则问是否约定)
+  Q2 各语言的测试命令?(给出探测到的候选,如"pytest {diff_test_paths} -q";无测试目录则问是否约定)
   Q3 架构约束命令?(有契约文件→直接采用;没有→问是否初始化,Python推荐import-linter模板)
   Q4 变异测试工具?(Python推荐mutmut;无对应工具的语言默认null并告知后果=G3跳过)
   Q5 端到端验证交互面?(决定e2e声明:cli|http|playwright|null;运维脚本类项目推荐cli,
@@ -317,6 +328,18 @@ architect触发信号(确定性检测,任一命中即派发,均无则跳过):
     正文含该环结构化output与门禁命令摘要
   - 作用:回滚点+审计轨迹(借鉴swarm-forge的commit交接持久化;规格等.scratch产物不入提交)
 
+编排状态落盘 pipeline-state.json(ADR-0001;与阶段提交并行,非git项目亦生效):
+  - 每环门禁通过后,主会话将编排状态写入 `.scratch/<feature>/pipeline-state.json`,经插件命令
+    `ai-coding-qa-pipeline pipeline-state update <json>`(schema校验)落盘;`read` 回读。
+  - 字段:feature / feature_name / requirement / current_ring(下一环)/
+    completed_rings / skipped / gates(每环 cmd+exit+evidence)/ paths(spec_path、
+    qa_flow_path)/ backprop_budget_left。
+  - 作用:会话中断(clear/换会话/进程退出)后,主会话 `pipeline-state read` 恢复——
+    报告"已到<环>,下一环<环>",从下一环续跑,不重来。恢复粒度=环间续跑,不承诺环内
+    (环是fresh子代理,环内失败已靠失败报告交接)。
+  - 机读JSON亦人类可读=审计轨迹,补阶段提交在非git项目下的空缺。恢复入口:用户说
+    "继续 feature-x"或主会话检测到未完成的 pipeline-state 时触发。
+
 下游回传(借鉴swarm-forge back-propagation,预算化):
   - G3/G4失败且主会话判定为功能缺陷(非测试盲区)时:
     携失败证据派coder修复 → 复跑失败环及其后所有门禁(不重启整条流水线)
@@ -325,6 +348,8 @@ architect触发信号(确定性检测,任一命中即派发,均无则跳过):
 ```
 
 关键:**门禁由主会话亲自执行命令验证**,不采信子代理自报结果——编排者与执行者分离,与文档"不信任Agent自觉性"原则一致。
+执行前,主会话从 `git diff` 计算本次 feature 的 diff 文件集,注入命令占位符
+`{diff_source_paths}`/`{diff_test_paths}`(见§5);`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。
 
 ## 7. 分发架构(独立插件项目,2026-09-16重构)
 
@@ -348,6 +373,7 @@ ai-coding-qa-pipeline/(独立插件项目,~/apps/ai-coding-qa-pipeline)
 │   └── doctor [quality.yml]        # §5.1冒烟验证命令化:按声明查门禁工具在位性(缺失给安装提示/缺配置引导)
 ├── skills/                   # 技能,随插件分发(/extensions 可审计)
 │   ├── pipeline-setup/       #   初始化质量配置向导(§5.1),含 references/lang-profiles.md 建议表
+│   ├── orchestrator-playbook/ #  主会话编排协议(§6):占位符注入 + pipeline-state 读写/恢复(ADR-0001)
 │   ├── coder-playbook/       #   执行 agent 的操作型 playbook
 │   ├── cleaner-playbook/
 │   ├── reinforcer-playbook/

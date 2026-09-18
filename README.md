@@ -8,11 +8,11 @@ omp(Oh My Pi)六-agent 开发流水线的**可分发组件**:agent 定义 + 门�
 ```
 agents/*.md            6 个流水线 agent(spec-definer/coder/cleaner/architect/reinforcer/qa-runner)
 bin/ai-coding-qa-pipeline.ts    门禁 CLI(bun 运行,@cucumber/gherkin 官方解析器)
-skills/                pipeline-setup(初始化)+ coder/cleaner/reinforcer/qa-runner 四份 playbook
+skills/                pipeline-setup(初始化)+ orchestrator-playbook(主会话编排)+ coder/cleaner/reinforcer/qa-runner 四份 playbook
 ```
 
 agent 正文只引用项目级 `.omp/quality.yml`(不写死路径);门禁命令由本 CLI 提供,项目内零脚本。
-四个执行 agent 经 frontmatter `autoload-skills` 挂各自 playbook,派发前自动加载。
+四个执行 agent 经 frontmatter `autoload-skills` 挂各自 playbook,派发前自动加载;主会话(编排者)按 `orchestrator-playbook` 描述触发加载,承担编排、门禁执行与编排状态读写。
 
 ## 安装(每台 omp 实例一次)
 
@@ -39,8 +39,9 @@ bun link                                    # 门禁 CLI 进 PATH(发布后: bun
 
 ```bash
 ai-coding-qa-pipeline spec-check <spec.feature> <qa-flow.md>          # G0:L1语法+L2结构+qa-flow模板
-ai-coding-qa-pipeline crap-check [--threshold N] [paths...]           # CRAP组合器(radon+coverage)
+ai-coding-qa-pipeline crap-check [--threshold N] [paths...]           # CRAP组合器(radon+coverage;文件或目录)
 ai-coding-qa-pipeline doctor [quality.yml路径]                        # §5.1冒烟验证:按声明查门禁工具在位性
+ai-coding-qa-pipeline pipeline-state read|update <state.json> [json]  # ADR-0001 编排状态读写:环间恢复+审计
 ```
 
 退出码:0=通过;1=不合格;2=参数/依赖错误(**环境问题**——主会话不应重试 agent,应装工具或把该门禁置 null 后重跑 doctor)。
@@ -59,15 +60,22 @@ ai-coding-qa-pipeline doctor [quality.yml路径]                        # §5.1�
 
 ## quality.yml 用法
 
+完整案例见 `skills/pipeline-setup/SKILL.md`(第 2 步生成,分发自包含)。要点:
+
 ```yaml
 spec:                                    # G0 规格门禁(主会话派发 spec-definer 后亲自跑)
   check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}
 languages:
   python:
-    complexity: ai-coding-qa-pipeline crap-check --threshold 6
+    test: pytest {diff_test_paths} -q
+    complexity: ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}
+    mutation: mutmut run --paths-to-mutate={diff_source_paths}
 ```
 
-`{spec_path}`/`{qa_flow_path}` 由主会话从 spec-definer 的 output schema 代入。
+占位符由主会话执行门禁时注入,quality.yml 对所有 feature 稳定、不写死具体文件路径:
+
+- `{spec_path}`/`{qa_flow_path}` — 主会话从 spec-definer 的 output schema 代入
+- `{diff_source_paths}`/`{diff_test_paths}` — 主会话执行前从 `git diff` 计算本次 feature 的源码/测试文件集代入
 
 ## 验证
 
