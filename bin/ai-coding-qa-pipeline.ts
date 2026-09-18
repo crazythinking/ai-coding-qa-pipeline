@@ -222,12 +222,14 @@ function cmdCrapCheck(args: string[]): never {
     console.log("用法: ai-coding-qa-pipeline crap-check [--threshold N] [paths...]");
     process.exit(2);
   }
-  const dirs = paths.length ? paths : ["lib", "scripts"];
-  const analysis = dirs.filter((p) => {
-    try { return statSync(p).isDirectory(); } catch { return false; }
+  const targets = paths.length ? paths : ["lib", "scripts"];
+  // 允许文件或目录(§5 scope:diff 需对单个新建文件做复杂度门禁;radon cc 两者均接受)。
+  // 只筛掉不存在的路径。
+  const analysis = targets.filter((p) => {
+    try { return statSync(p).isFile() || statSync(p).isDirectory(); } catch { return false; }
   });
   if (!analysis.length) {
-    console.error("[CRAP] 无可分析目录");
+    console.error("[CRAP] 无可分析路径(文件或目录均接受)");
     process.exit(2);
   }
 
