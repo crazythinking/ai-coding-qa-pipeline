@@ -86,12 +86,21 @@ quality.yml 命令字符串仍是协议事实源(doctor 按首词查在位性、
 - `{spec_path}`/`{qa_flow_path}` — 主会话从 spec-definer 的 output schema 代入
 - `{diff_source_paths}`/`{diff_test_paths}` — 主会话执行前从 `git diff` 计算本次 feature 的源码/测试文件集代入
 
-## 验证
+## 验证(官方通道,离线确定性)
+
+`scripts/verify-plugin.test.ts`(`bun run verify`)基于 omp 官方插件实现指导的可靠通道:
+
+1. **单元层**:直接断言 `src/gates.ts` 门禁纯函数(exitCode + 输出行),好/坏样例双向;
+2. **集成层**:用官方 `loadExtensions()`(来自 `@oh-my-pi/pi-coding-agent/extensibility/extensions`)
+   加载插件 extension,断言无加载错误 + 4 个门禁工具注册,然后直接调用每个工具的
+   `ToolDefinition.execute()`(不经 LLM、离线、确定性),断言返回内容与 exitCode 与 CLI 语义一致;
+3. **安装层(发布冒烟)**:`omp plugin install <tarball>` —— omp 官方 `validateInstalledExtensions`
+   在安装时即验证 extension 可解析/import/初始化,失败自动回滚安装。
 
 ```bash
-ai-coding-qa-pipeline spec-check <好spec> <好qa-flow>   # exit=0 PASS
-ai-coding-qa-pipeline spec-check <坏spec> <好qa-flow>   # exit=1,列出缺的步骤家族
-# 插件已装时,同一门禁经 qa_spec_check 工具调用,行为一致
+bun install                    # 首次:装依赖 + devDependencies(官方 SDK,仅测试用)
+bun run verify                 # 15 项断言:单元 8 + 集成 7,全绿才可发布
+omp plugin install <tarball>   # 安装冒烟(官方安装时 extension 校验)
 ```
 
 ## 开发

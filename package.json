@@ -10,6 +10,12 @@
     "@cucumber/gherkin": "^30.0.0",
     "yaml": "^2.9.1"
   },
+  "devDependencies": {
+    "@oh-my-pi/pi-coding-agent": "^18.2.5"
+  },
+  "scripts": {
+    "verify": "bun test scripts/verify-plugin.test.ts"
+  },
   "omp": {
     "name": "ai-coding-qa-pipeline",
     "description": "六-agent 开发流水线 agent 定义与门禁工具(CLI + extension)",
@@ -25,5 +31,8 @@
     "extensions/",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "devDependencies": {
+    "@oh-my-pi/pi-coding-agent": "^18.2.6"
+  }
 }
