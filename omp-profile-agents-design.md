@@ -382,9 +382,11 @@ ai-coding-qa-pipeline/(独立插件项目,~/apps/ai-coding-qa-pipeline)
 │   └── qa-runner-playbook/
 └── README.md                 # 安装/升级/使用说明(+quality.yml模板)
 
-安装(每台目标机的omp实例,一次):
-  omp plugin link ~/apps/ai-coding-qa-pipeline    # agents分发(发布后:omp install npm:ai-coding-qa-pipeline)
-  bun link                              # 门禁CLI进PATH(发布后:bun add -g ai-coding-qa-pipeline)
+安装(每台目标机的omp实例,一次,一步到位):
+  omp plugin install ai-coding-qa-pipeline       # 发布后(npm):agents/skills/门禁工具全部就位,免 bun link
+  # 本地: omp plugin install /path/to/ai-coding-qa-pipeline-0.1.0.tgz
+  插件 extension 注册 4 个门禁工具(qa_spec_check/qa_crap_check/qa_doctor/qa_pipeline_state),
+  主会话会话内直接调用,无需 CLI 进 PATH;CLI 为等价薄壳供独立场景回退。
 
 <落地项目>/——只有项目声明,无可复用代码
 ├── .omp/quality.yml           # 门禁命令引用插件CLI(ai-coding-qa-pipeline),零仓库路径

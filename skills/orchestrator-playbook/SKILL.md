@@ -17,7 +17,8 @@ description: Use when orchestrating the full ai-coding-qa-pipeline development f
 派发前先查 `.scratch/<feature>/pipeline-state.json`:
 
 ```
-ai-coding-qa-pipeline pipeline-state read <state.json>
+qa_pipeline_state  op=read state_path=<state.json>
+# 或等价的 CLI: ai-coding-qa-pipeline pipeline-state read <state.json>
 ```
 
 - 输出 `{}`(无状态)= 新 feature,从头开始。
@@ -39,16 +40,24 @@ ai-coding-qa-pipeline pipeline-state read <state.json>
 
 ## 门禁执行:主会话亲自跑,不信 agent 自报
 
-- **编排者与执行者分离**:门禁命令一律主会话亲自执行验证,绝不采信执行 agent 的 `gate_results` 自报。
-- **占位符注入**:执行前从 `git diff` 计算本次 feature 的 diff 文件集,注入 `{diff_source_paths}`(源码,非测试)/ `{diff_test_paths}`(测试);`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。占位符集为空 → 整目录兜底或跳过,报告中说明。
-- **退出码语义**:0=通过;1=不合格(该环失败,同环重试/回传);2=环境问题(工具缺失,不重试 agent,装工具或置 null 后重跑)。
+- **编排者与执行者分离**:门禁一律主会话亲自执行验证,绝不采信执行 agent 的 `gate_results` 自报。
+- **工具优先(推荐)**:本插件安装后注册 4 个门禁工具,主会话直接调用(无需 CLI 进 PATH):
+  - `qa_spec_check` — G0 规格门禁(参数 `spec_path` + `qa_flow_path`)
+  - `qa_crap_check` — CRAP 组合器(参数 `threshold` 可选、`paths` 可选)
+  - `qa_doctor` — 环境冒烟(参数 `quality_yml_path` 可选)
+  - `qa_pipeline_state` — 编排状态读/写(参数 `op` + `state_path` + `json`)
+  工具与 CLI 共享同一套核心逻辑(src/gates.ts),退出码语义一致。quality.yml 里的命令字符串仍保留
+  作为协议事实源与独立 CLI 场景;插件已装时主会话**优先用工具**,命令字符串仅在无工具环境回退。
+- **占位符注入**:执行前从 `git diff` 计算本次 feature 的 diff 文件集,注入 `{diff_source_paths}`(源码,非测试)/ `{diff_test_paths}`(测试);`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。占位符集为空 → 整目录兜底或跳过,报告中说明。工具调用时把占位符实参直接作为工具参数。
+- **退出码语义**:0=通过;1=不合格(该环失败,同环重试/回传);2=环境问题(工具缺失,不重试 agent,装工具或置 null 后重跑)。工具返回的 `details.exitCode` 即该语义。
 
 ## 写编排状态(每环通过后,ADR-0001)
 
-将状态写入 `.scratch/<feature>/pipeline-state.json`(主会话持有,agent 不写):
+将状态写入 `.scratch/<feature>/pipeline-state.json`(主会话持有,agent 不写)。两种等价方式,推荐工具:
 
 ```
-ai-coding-qa-pipeline pipeline-state update <state.json> '<json>'
+qa_pipeline_state  op=update state_path=.scratch/<feature>/pipeline-state.json json='{...}'
+# 或等价的 CLI: ai-coding-qa-pipeline pipeline-state update <state.json> '<json>'
 ```
 
 字段:feature / feature_name / requirement / current_ring(下一环)/ completed_rings /

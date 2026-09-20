@@ -1,7 +1,7 @@
 {
   "name": "ai-coding-qa-pipeline",
   "version": "0.1.0",
-  "description": "omp 六-agent 开发流水线的可分发组件:agent 定义 + 门禁 CLI(spec-check / crap-check)",
+  "description": "omp 六-agent 开发流水线的完整插件:agent 定义 + 门禁 CLI + extension 工具(主会话直接调用,免 PATH)",
   "type": "module",
   "bin": {
     "ai-coding-qa-pipeline": "bin/ai-coding-qa-pipeline.ts"
@@ -12,6 +12,18 @@
   },
   "omp": {
     "name": "ai-coding-qa-pipeline",
-    "description": "六-agent 开发流水线 agent 定义与门禁工具"
-  }
+    "description": "六-agent 开发流水线 agent 定义与门禁工具(CLI + extension)",
+    "extensions": [
+      "./extensions/index.ts"
+    ]
+  },
+  "files": [
+    "agents/",
+    "skills/",
+    "bin/",
+    "src/",
+    "extensions/",
+    "README.md",
+    "LICENSE"
+  ]
 }

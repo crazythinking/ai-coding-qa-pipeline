@@ -113,7 +113,12 @@ languages:
 
 ### 第 3 步 冒烟验证
 
-运行 `ai-coding-qa-pipeline doctor`(逐条查每条非 null 命令的工具在位性):
+运行 `doctor` 逐条查每条非 null 命令的工具在位性。两种等价方式,推荐工具(插件已装时):
+
+```
+qa_doctor   # 无参,默认读 .omp/quality.yml;或传 quality_yml_path
+# 或等价的 CLI: ai-coding-qa-pipeline doctor [quality.yml路径]
+```
 
 - 逐条报 `[OK]` / `[MISSING(含安装提示)]` / `[SKIP(null)]`
 - 缺失项回问答修正(装工具或置 null);全部 OK 才落盘
