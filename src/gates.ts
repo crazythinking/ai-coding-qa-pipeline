@@ -228,12 +228,12 @@ export function crapCheck(threshold: number, paths: string[], extraLines?: strin
     return { lines, exitCode: 2 };
   }
 
-  const radon = spawnSync("radon", ["cc", "--json", "--total-average", ...analysis], { encoding: "utf8" });
+  const radon = spawnSync("radon", ["cc", "--json", "--total-average", ...analysis], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (![0, 2].includes(radon.status ?? -1)) { // radon 对无代码文件返回 2
     lines.push(`[CRAP] radon cc 失败: ${radon.stderr}`);
     return { lines, exitCode: 2 };
   }
-  const covRun = spawnSync("coverage", ["json", "-o", "-", "--quiet"], { encoding: "utf8" });
+  const covRun = spawnSync("coverage", ["json", "-o", "-", "--quiet", "--fail-under=0"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (covRun.status !== 0) {
     lines.push(`[CRAP] coverage json 失败: ${covRun.stderr}`);
     return { lines, exitCode: 2 };
