@@ -37,7 +37,7 @@ interface MinExtensionAPI {
       params: Record<string, unknown>,
       _signal: unknown,
       _onUpdate: unknown,
-      _ctx: { cwd: string },
+      _ctx?: { cwd: string },
     ) => Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }>;
   }) => void;
 }
@@ -66,8 +66,8 @@ export default function extension(pi: MinExtensionAPI) {
       spec_path: z.string(),
       qa_flow_path: z.string(),
     }),
-    async execute(_id, params) {
-      const r = specCheck(String(params.spec_path), String(params.qa_flow_path));
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const r = specCheck(String(params.spec_path), String(params.qa_flow_path), ctx?.cwd);
       return toContent(r.lines, r.exitCode);
     },
   });
@@ -82,10 +82,10 @@ export default function extension(pi: MinExtensionAPI) {
       threshold: z.number().optional(),
       paths: z.array(z.string()).optional(),
     }),
-    async execute(_id, params) {
+    async execute(_id, params, _signal, _onUpdate, ctx) {
       const threshold = typeof params.threshold === "number" ? params.threshold : 6;
       const paths = Array.isArray(params.paths) ? params.paths.map(String) : [];
-      const r = crapCheck(threshold, paths);
+      const r = crapCheck(threshold, paths, undefined, ctx?.cwd);
       return toContent(r.lines, r.exitCode);
     },
   });
@@ -99,9 +99,9 @@ export default function extension(pi: MinExtensionAPI) {
     parameters: z.object({
       quality_yml_path: z.string().optional(),
     }),
-    async execute(_id, params) {
+    async execute(_id, params, _signal, _onUpdate, ctx) {
       const qPath = params.quality_yml_path ? String(params.quality_yml_path) : ".omp/quality.yml";
-      const r = doctor(qPath);
+      const r = doctor(qPath, ctx?.cwd);
       return toContent(r.lines, r.exitCode);
     },
   });
@@ -118,7 +118,7 @@ export default function extension(pi: MinExtensionAPI) {
       state_path: z.string(),
       json: z.string().optional(),
     }),
-    async execute(_id, params) {
+    async execute(_id, params, _signal, _onUpdate, ctx) {
       const op = String(params.op);
       const statePath = String(params.state_path);
       const rest: string[] = [];
@@ -128,7 +128,7 @@ export default function extension(pi: MinExtensionAPI) {
         }
         rest.push(params.json);
       }
-      const r = pipelineState(op, [statePath, ...rest]);
+      const r = pipelineState(op, [statePath, ...rest], ctx?.cwd);
       return toContent(r.lines, r.exitCode);
     },
   });

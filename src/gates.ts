@@ -11,7 +11,7 @@
  */
 
 import { readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse as parseYaml } from "yaml";
 import { Parser, AstBuilder, GherkinClassicTokenMatcher, Errors } from "@cucumber/gherkin";
@@ -47,6 +47,11 @@ export interface GateResult {
 
 function asRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+/** 相对路径基于 cwd 解析;绝对路径原样返回。 */
+function resolvePath(cwd: string, p: string): string {
+  return isAbsolute(p) ? p : join(cwd, p);
 }
 
 /** 收集 feature 下所有场景/场景大纲(支持 Rule 嵌套)。 */
@@ -181,11 +186,11 @@ function checkQaFlow(path: string): { violations: string[]; fatal?: string } {
   return { violations, warns };
 }
 
-/** G0 规格门禁: L1 语法 + L2 结构 + qa-flow 固定模板。 */
-export function specCheck(specPath: string, qaPath: string): GateResult {
+/** G0 规格门禁: L1 语法 + L2 结构 + qa-flow 固定模板。cwd 用于解析相对路径。 */
+export function specCheck(specPath: string, qaPath: string, cwd = process.cwd()): GateResult {
   const lines: string[] = [];
-  const { count, violations: specV, fatal: specFatal } = checkGherkin(specPath);
-  const { violations: qaV, fatal: qaFatal, warns } = checkQaFlow(qaPath);
+  const { count, violations: specV, fatal: specFatal } = checkGherkin(resolvePath(cwd, specPath));
+  const { violations: qaV, fatal: qaFatal, warns } = checkQaFlow(resolvePath(cwd, qaPath));
   if (specFatal) { lines.push(`FAIL [spec] ${specFatal}`); return { lines, exitCode: 2 }; }
   if (qaFatal) { lines.push(`FAIL [qa-flow] ${qaFatal}`); return { lines, exitCode: 2 }; }
   for (const v of specV) lines.push(`FAIL [spec] ${v}`);
@@ -213,14 +218,14 @@ function parseJsonRecord(text: string, what: string): Record<string, unknown> | 
 }
 
 /** CRAP 组合器:radon cc + coverage json → CRAP 公式(不自造分析,复杂度完全由 radon 承担)。 */
-export function crapCheck(threshold: number, paths: string[], extraLines?: string[]): GateResult {
+export function crapCheck(threshold: number, paths: string[], extraLines?: string[], cwd = process.cwd()): GateResult {
   const lines: string[] = extraLines ?? [];
   if (!Number.isFinite(threshold)) {
     lines.push("用法: ai-coding-qa-pipeline crap-check [--threshold N] [paths...]");
     return { lines, exitCode: 2 };
   }
   const targets = paths.length ? paths : ["lib", "scripts"];
-  const analysis = targets.filter((p) => {
+  const analysis = targets.map((p) => resolvePath(cwd, p)).filter((p) => {
     try { return statSync(p).isFile() || statSync(p).isDirectory(); } catch { return false; }
   });
   if (!analysis.length) {
@@ -228,12 +233,13 @@ export function crapCheck(threshold: number, paths: string[], extraLines?: strin
     return { lines, exitCode: 2 };
   }
 
-  const radon = spawnSync("radon", ["cc", "--json", "--total-average", ...analysis], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const spawnOpts = { encoding: "utf8" as const, cwd, maxBuffer: 64 * 1024 * 1024 };
+  const radon = spawnSync("radon", ["cc", "--json", "--total-average", ...analysis], spawnOpts);
   if (![0, 2].includes(radon.status ?? -1)) { // radon 对无代码文件返回 2
     lines.push(`[CRAP] radon cc 失败: ${radon.stderr}`);
     return { lines, exitCode: 2 };
   }
-  const covRun = spawnSync("coverage", ["json", "-o", "-", "--quiet", "--fail-under=0"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const covRun = spawnSync("coverage", ["json", "-o", "-", "--quiet", "--fail-under=0"], spawnOpts);
   if (covRun.status !== 0) {
     lines.push(`[CRAP] coverage json 失败: ${covRun.stderr}`);
     return { lines, exitCode: 2 };
@@ -326,20 +332,21 @@ export interface DoctorOutcome {
   skipped: number;
 }
 
-/** 冒烟验证:按 quality.yml 声明逐条查门禁工具在位性。 */
-export function doctor(qPath: string): DoctorOutcome {
+/** 冒烟验证:按 quality.yml 声明逐条查门禁工具在位性。cwd 用于解析 quality.yml 路径。 */
+export function doctor(qPath: string, cwd = process.cwd()): DoctorOutcome {
+  const resolved = resolvePath(cwd, qPath);
   const lines: string[] = [];
   let text: string;
   try {
-    text = readFileSync(qPath, "utf8");
+    text = readFileSync(resolved, "utf8");
   } catch (e) {
     const code = (e as NodeJS.ErrnoException)?.code;
     if (code === "ENOENT") {
-      lines.push(`[doctor] 未找到质量配置: ${qPath}`);
+      lines.push(`[doctor] 未找到质量配置: ${resolved}`);
       lines.push('[doctor] 项目尚未接入流水线。请在 omp 会话中对主会话说"初始化质量配置",触发 pipeline-setup 技能生成 .omp/quality.yml;已有项目新增语言门禁同理。');
       return { lines, exitCode: 2, ok: 0, missing: 0, skipped: 0 };
     }
-    lines.push(`[doctor] 读取失败: ${qPath} (${e instanceof Error ? e.message : String(e)})`);
+    lines.push(`[doctor] 读取失败: ${resolved} (${e instanceof Error ? e.message : String(e)})`);
     return { lines, exitCode: 2, ok: 0, missing: 0, skipped: 0 };
   }
   let root: Record<string, unknown>;
@@ -353,7 +360,7 @@ export function doctor(qPath: string): DoctorOutcome {
   }
 
   let ok = 0, missing = 0, skipped = 0;
-  lines.push(`[doctor] 读取 ${qPath}`);
+  lines.push(`[doctor] 读取 ${resolved}`);
   for (const gate of collectGates(root)) {
     if (gate.cmd === null) {
       lines.push(`[SKIP]     ${gate.label.padEnd(16)} (null,该门禁不启用)`);
@@ -361,7 +368,7 @@ export function doctor(qPath: string): DoctorOutcome {
       continue;
     }
     const tool = gate.cmd.trim().split(/\s+/)[0];
-    const found = spawnSync("which", [tool], { encoding: "utf8" }).status === 0;
+    const found = spawnSync("which", [tool], { encoding: "utf8", cwd }).status === 0;
     if (found) {
       lines.push(`[OK]       ${gate.label.padEnd(16)} ${tool}`);
       ok++;
@@ -409,12 +416,13 @@ function validateState(root: Record<string, unknown>): string[] {
   return problems;
 }
 
-/** 编排状态读(无状态文件→空对象;schema 非法→exit 2)。 */
-export function pipelineStateRead(statePath: string): GateResult {
+/** 编排状态读(无状态文件→空对象;schema 非法→exit 2)。cwd 用于解析相对路径。 */
+export function pipelineStateRead(statePath: string, cwd = process.cwd()): GateResult {
+  const resolved = resolvePath(cwd, statePath);
   const lines: string[] = [];
   let text: string;
   try {
-    text = readFileSync(statePath, "utf8");
+    text = readFileSync(resolved, "utf8");
   } catch {
     // 无状态文件 = 尚未开始/已清理,输出空对象供恢复方区分"无状态"与"已完成"
     lines.push("{}");
@@ -426,7 +434,7 @@ export function pipelineStateRead(statePath: string): GateResult {
     if (!asRecord(parsed)) throw new Error("顶层不是对象");
     root = parsed;
   } catch (e) {
-    lines.push(`[pipeline-state] 解析失败: ${statePath} (${e instanceof Error ? e.message : String(e)})`);
+    lines.push(`[pipeline-state] 解析失败: ${resolved} (${e instanceof Error ? e.message : String(e)})`);
     return { lines, exitCode: 2 };
   }
   const problems = validateState(root);
@@ -438,8 +446,9 @@ export function pipelineStateRead(statePath: string): GateResult {
   return { lines, exitCode: 0 };
 }
 
-/** 编排状态写(带 schema 校验;目录自动建)。 */
-export function pipelineStateUpdate(statePath: string, json: string): GateResult {
+/** 编排状态写(带 schema 校验;目录自动建)。cwd 用于解析相对路径。 */
+export function pipelineStateUpdate(statePath: string, json: string, cwd = process.cwd()): GateResult {
+  const resolved = resolvePath(cwd, statePath);
   const lines: string[] = [];
   let next: Record<string, unknown>;
   try {
@@ -456,10 +465,10 @@ export function pipelineStateUpdate(statePath: string, json: string): GateResult
     return { lines, exitCode: 2 };
   }
   try {
-    mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(statePath, JSON.stringify(next, null, 2) + "\n", "utf8");
+    mkdirSync(dirname(resolved), { recursive: true });
+    writeFileSync(resolved, JSON.stringify(next, null, 2) + "\n", "utf8");
   } catch (e) {
-    lines.push(`[pipeline-state] 写入失败: ${statePath} (${e instanceof Error ? e.message : String(e)})`);
+    lines.push(`[pipeline-state] 写入失败: ${resolved} (${e instanceof Error ? e.message : String(e)})`);
     return { lines, exitCode: 2 };
   }
   lines.push("[pipeline-state] 状态已写入");
@@ -467,13 +476,13 @@ export function pipelineStateUpdate(statePath: string, json: string): GateResult
 }
 
 /** 编排状态读写分发。op: "read" | "update"。 */
-export function pipelineState(op: string, args: string[]): GateResult {
+export function pipelineState(op: string, args: string[], cwd = process.cwd()): GateResult {
   if (op === "read") {
     const statePath = args[0];
     if (!statePath) {
       return { lines: ["用法: ai-coding-qa-pipeline pipeline-state read <state.json路径>"], exitCode: 2 };
     }
-    return pipelineStateRead(statePath);
+    return pipelineStateRead(statePath, cwd);
   }
   if (op === "update") {
     if (args.length < 2) {
@@ -481,7 +490,7 @@ export function pipelineState(op: string, args: string[]): GateResult {
     }
     const statePath = args[0];
     const json = args.slice(1).join(" ");
-    return pipelineStateUpdate(statePath, json);
+    return pipelineStateUpdate(statePath, json, cwd);
   }
   return { lines: ["用法: ai-coding-qa-pipeline pipeline-state read|update <state.json路径> [json]"], exitCode: 2 };
 }

@@ -13,9 +13,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { loadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
 import {
   specCheck,
@@ -34,6 +34,7 @@ function makeFixture() {
   const dir = mkdtempSync(join(tmpdir(), "qa-pipeline-verify-"));
   const write = (name: string, content: string): string => {
     const p = join(dir, name);
+    mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, content, "utf8");
     return p;
   };
@@ -148,10 +149,11 @@ describe("extension 集成层(loadExtensions 官方加载器)", () => {
     }
   });
 
-  /** 从加载结果取已注册工具的 execute,直接调用(免 LLM)。 */
+  /** 从加载结果取已注册工具的 execute,直接调用(免 LLM)。ctxCwd 控制注入的上下文工作目录。 */
   async function executeTool(
     name: string,
     params: Record<string, unknown>,
+    ctxCwd = process.cwd(),
   ): Promise<{ text: string; exitCode: number }> {
     const result = await loadExtensions([EXTENSION_PATH], process.cwd());
     let tool;
@@ -165,7 +167,7 @@ describe("extension 集成层(loadExtensions 官方加载器)", () => {
       params as never,
       undefined as never,
       undefined as never,
-      { cwd: process.cwd() } as never,
+      { cwd: ctxCwd } as never,
     );
     const text = (res.content as Array<{ type: string; text?: string }>)
       .map((c) => c.text ?? "").join("\n");
@@ -210,5 +212,42 @@ describe("extension 集成层(loadExtensions 官方加载器)", () => {
     });
     expect(exitCode).toBe(2);
     expect(text).toContain("未找到质量配置");
+  });
+
+  test("cwd 回归:相对路径参数基于 ctx.cwd 解析(非进程 cwd)", async () => {
+    // 复现用户场景:omp 进程 cwd 与项目根不同,工具靠 ctx.cwd 定位项目文件。
+    const fx = makeFixture();
+    try {
+      fx.write("spec/good.feature", GOOD_SPEC);
+      fx.write("qa/good-qa.md", GOOD_QA);
+      // 进程 cwd 在 /tmp(无关目录),ctx.cwd 指向 fixture 项目根;参数为相对路径。
+      const { text, exitCode } = await executeTool(
+        "qa_spec_check",
+        { spec_path: "spec/good.feature", qa_flow_path: "qa/good-qa.md" },
+        fx.dir,
+      );
+      expect(exitCode).toBe(0, `期望 exit=0,输出: ${text}`);
+      expect(text).toContain("PASS");
+    } finally { fx.cleanup(); }
+  });
+
+  test("cwd 回归:qa_pipeline_state 相对路径写读基于 ctx.cwd", async () => {
+    const fx = makeFixture();
+    try {
+      const valid = JSON.stringify({
+        feature: "demo",
+        feature_name: "演示",
+        requirement: "演示需求",
+        current_ring: "coder",
+        completed_rings: ["spec"],
+      });
+      const statePath = ".scratch/demo/pipeline-state.json";
+      const w = await executeTool("qa_pipeline_state", { op: "update", state_path: statePath, json: valid }, fx.dir);
+      expect(w.exitCode).toBe(0, `写入失败: ${w.text}`);
+      const r = await executeTool("qa_pipeline_state", { op: "read", state_path: statePath }, fx.dir);
+      expect(r.exitCode).toBe(0);
+      const parsed = JSON.parse(r.text);
+      expect(parsed.feature).toBe("demo");
+    } finally { fx.cleanup(); }
   });
 });
