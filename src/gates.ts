@@ -262,7 +262,9 @@ export function crapCheck(threshold: number, paths: string[], extraLines?: strin
   if (asRecord(covRec.files)) {
     for (const [file, info] of Object.entries(covRec.files)) {
       if (asRecord(info) && asRecord(info.summary) && typeof info.summary.percent_covered === "number") {
-        coverage.set(file, info.summary.percent_covered);
+        // radon key 经 resolvePath 已是绝对路径;coverage json 的 key 是相对路径,
+        // 必须规范化为绝对路径两者才匹配(否则 cov 恒 0 → 假超标)
+        coverage.set(resolvePath(cwd, file), info.summary.percent_covered);
       }
     }
   }
