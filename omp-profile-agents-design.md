@@ -75,7 +75,12 @@ blocking: true
 输出目录:.scratch/<feature>/
 ```
 
-- `output:` schema:`{spec_path, qa_flow_path, scenario_count}`
+- `output:` schema:`{spec_path, qa_flow_path, scenario_count, config_gaps[]}`
+  - `config_gaps`(2026-10-13 增设):`{language, evidence, missing[], uncertain}`——需求隐含
+    技术栈在 quality.yml 无门禁覆盖时的上报项(如需求含前端/Playwright 而 quality.yml 只有
+    python);`uncertain: true` = 证据不足语言栈未定。**spec-definer 只上报不处置、不因门禁
+    缺失裁剪需求**;处置权在主会话 G0 卡点(选项 A 按 lang-profiles 补 languages 段 + doctor;
+    选项 B 用户显式接受缺口;均写入 pipeline-state `config_changes`)。
 - 门禁G0(2026-09-16增设,修订原"无门禁(人类审规格即门禁)"):格式由命令机器卡,**人类审规格降级为纯语义卡点**(L3)
   - 单命令:`ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}`(插件ai-coding-qa-pipeline的全局CLI,内部用官方@cucumber/gherkin解析:L1语法+L2结构+qa-flow模板一体;零项目路径)
   - scenario_count 对账:spec-check输出 `scenario_count=N`,主会话与agent自报值比对,不一致即门禁失败(防谎报)
@@ -217,7 +222,8 @@ coverage_target: 100
 architect_signal:      # architect派发阈值(§6触发信号)
   new_files: 3         # 新建文件数≥3
   modules_touched: 3   # 触碰顶层模块数≥3
-e2e: cli               # qa-runner交互面: cli|http|playwright|null(null=G4跳过,终点G3)
+e2e: cli               # 项目可用验证面(默认面): cli|http|playwright|null(null=G4跳过,终点G3)
+                       # feature 级 G4 实际面按该 feature 的 qa-flow 交互面选,超出声明面与用户确认(2026-10-13)
 spec:                  # G0规格门禁(spec-definer产出,主会话派发后、人类审查前亲自跑;见§3①)
   check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}   # 插件CLI,全局可用:L1+L2+qa-flow模板
 languages:
@@ -254,7 +260,9 @@ languages:
 
 - 某语言`mutation: null`→reinforcer对该语言跳过并在output中声明`skipped_reason`;
   `e2e: null`→qa-runner不派发(无系统级验证面,终点G3)。
-- `e2e`是项目级声明(一个项目一个主交互面),故置于languages之外;多面项目二期再扩展为per-language。
+- `e2e`是项目级声明(项目当前可用的验证面/默认面),故置于languages之外;feature 级 G4 实际面
+  由主会话按该 feature 的 qa-flow 交互面选择,超出声明面与用户确认(2026-10-13;需求经
+  spec-definer `config_gaps` 上报缺口,主会话 G0 处置);多面项目二期再扩展为per-language。
 - 命令一律从quality.yml读,agent不猜测——"不遵守就过不去"的确定性来自这里。
 
 ### 5.1 quality.yml 初始化协议(问答式,不由用户手写)

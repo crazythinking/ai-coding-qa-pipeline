@@ -128,6 +128,8 @@ qa_doctor   # 无参,默认读 .omp/quality.yml;或传 quality_yml_path
 
 增量 diff:对比现有已声明语言 vs 本次扫描候选,**只问新增 / 移除项**,未确认节原样保留;diff 预览后确认。不覆盖未确认的节。
 
+**需求时刻的新栈缺口**(setup 时未检测、需求文档才引入的栈):由 spec-definer 在 G0 上报 `config_gaps`,主会话在 G0 卡点按本技能增量模式补齐——读需求证据 → 问新增语言 → 生成缺失段 → doctor 冒烟。setup 不需要预先知道需求内容;Q1 补录是用户已知时的提前项,不是替代。
+
 ## 原则
 
 - quality.yml 是门禁唯一事实源,agent 不猜测

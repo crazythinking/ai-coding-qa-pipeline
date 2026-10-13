@@ -13,8 +13,10 @@ feature 名与编排状态(当前环、已完成环、各环门禁证据)过去�
   已靠失败报告交接);状态文件只保证"从已完成环的下一环继续"。
 - **字段**:feature / feature_name / requirement / current_ring / completed_rings /
   skipped / gates(每环 cmd+exit+evidence)/ paths(spec_path、qa_flow_path)/
-  backprop_budget_left。由 CLI 子命令 `pipeline-state` 读写并校验 schema,防止
-  主会话手写漂移;机读 JSON 亦人类可读,即审计轨迹(补 git 在非 git 项目下的空缺)。
+  backprop_budget_left / config_changes(可选 string[]:quality.yml 变更或用户显式
+  接受的验证缺口,由主会话在 G0 处置 spec-definer 上报的 config_gaps 后写入)。
+  由 CLI 子命令 `pipeline-state` 读写并校验 schema,防止主会话手写漂移;机读 JSON
+  亦人类可读,即审计轨迹(补 git 在非 git 项目下的空缺)。
 - **写入时机**:与 §6 阶段提交并行——每环门禁通过后主会话更新。
 
 被拒绝的替代:仅靠 git 阶段提交(非 git 项目无恢复点)、把状态放 `.omp/` 项目级

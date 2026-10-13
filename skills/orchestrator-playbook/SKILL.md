@@ -28,12 +28,15 @@ qa_pipeline_state  op=read state_path=<state.json>
 ## 主流程
 
 1. **定位**:确认这是完整开发流程;读 `.omp/quality.yml`;无则先跑 `pipeline-setup` 初始化。
-2. **G0 规格**:派 `spec-definer`(需求文档)→ 主会话亲自跑 `spec.check`(代入 `{spec_path}`/`{qa_flow_path}`)→ 打印 spec 路径,**暂停请用户确认(纯语义卡点)**。
+2. **G0 规格**:派 `spec-definer`(需求文档)→ 主会话亲自跑 `spec.check`(代入 `{spec_path}`/`{qa_flow_path}`)→ 若 output.config_gaps 非空,**主会话亲自读 `.omp/quality.yml` 复核**(不信 agent 自报)→ 打印 spec 路径 + 缺口清单,**暂停请用户决策(纯语义卡点,与规格确认同一卡点)**:
+   - **A 补齐**:按 `skills/pipeline-setup/references/lang-profiles.md` 对应语言行生成 quality.yml 缺失段(`languages.<lang>` 的 test/lint/complexity;mutation 无工具默认 null 并告知后果=G3 跳过),跑 `doctor` 冒烟;缺 npm 包等环境依赖 → 给安装提示,用户装后重跑 doctor;变更写入 pipeline-state 的 `config_changes`。
+   - **B 接受缺口**:用户确认该部分本 feature 不做门禁验证 → 记入 `config_changes`(如 "user accepted: 前端无 e2e 验证"),流水线继续。
+   - 缺口 `uncertain: true`(证据不足,语言栈未定)→ 先问用户该栈是什么语言,再按 A 补齐。
 3. **G1 编码**:用户确认后派 `coder` → 主会话亲自跑该语言 `test`(注入占位符)→ 失败让 coder 同环修(≤3 轮)。
 4. **G2 清理**:派 `cleaner` → 跑 `complexity` + 复跑 `test`/`arch`。
 5. **architect 信号检测**:新建文件数 ≥ 阈值、或 cleaner 上报 structural_changes 非空、或改了架构约束文件 → 派 `architect`(跑 `arch`+`test`);无信号则跳过(默认路径)。
 6. **G3 强化**:派 `reinforcer` → 跑 `mutation`(diff 范围)+ `coverage`。
-7. **G4 QA**:`e2e` 非 null 才派 `qa-runner`;null 则终点 G3。
+7. **G4 QA**:`e2e` 非 null 才派 `qa-runner`;null 则终点 G3。**e2e 面按 feature 实际交互面选**:quality.yml 的 `e2e` 声明项目当前可用的验证面(默认面);实际面由本 feature 的 qa-flow.md 决定(cli/http/playwright),超出声明面 → 与用户确认后执行。
 8. **每环门禁通过后**:写编排状态(见下)+ 阶段提交(git 项目,可选)。
 
 任一环连续 3 次门禁失败 → 中止,输出失败环 + 证据 + 建议,交回用户。
@@ -61,7 +64,8 @@ qa_pipeline_state  op=update state_path=.scratch/<feature>/pipeline-state.json j
 ```
 
 字段:feature / feature_name / requirement / current_ring(下一环)/ completed_rings /
-skipped / gates(每环 cmd+exit+evidence)/ paths / backprop_budget_left。
+skipped / gates(每环 cmd+exit+evidence)/ paths / backprop_budget_left /
+config_changes(quality.yml 变更或用户接受的验证缺口,G0 处置 config_gaps 后写入)。
 写入由 CLI 做 schema 校验,防手写漂移。
 
 - **粒度 = 环间续跑**:状态只记录"已完成到哪一环",不承诺环内恢复(环是 fresh 子代理,环内失败已靠失败报告交接)。

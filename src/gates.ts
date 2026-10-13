@@ -387,7 +387,10 @@ export function doctor(qPath: string, cwd = process.cwd()): DoctorOutcome {
 }
 
 /** pipeline-state:读/写 `.scratch/<feature>/pipeline-state.json` 编排状态(ADR-0001)。
- *  恢复粒度=环间续跑;schema 校验防主会话手写漂移;机读 JSON 亦人类可读=审计轨迹。 */
+ *  恢复粒度=环间续跑;schema 校验防主会话手写漂移;机读 JSON 亦人类可读=审计轨迹。
+ *  字段:feature / feature_name / requirement / current_ring / completed_rings /
+ *  skipped / gates / paths / backprop_budget_left / config_changes(quality.yml 变更
+ *  或用户接受的验证缺口,由主会话在 G0 处置 config_gaps 后写入)。 */
 const REQUIRED_STATE_FIELDS = ["feature", "current_ring", "completed_rings"] as const;
 const STRING_FIELDS = ["feature", "feature_name", "requirement", "current_ring"] as const;
 
@@ -415,6 +418,9 @@ function validateState(root: Record<string, unknown>): string[] {
   if (root.gates !== undefined && !asRecord(root.gates)) problems.push("字段 gates 应为对象");
   if (root.paths !== undefined && !asRecord(root.paths)) problems.push("字段 paths 应为对象");
   if (root.skipped !== undefined && !asRecord(root.skipped)) problems.push("字段 skipped 应为对象");
+  if (root.config_changes !== undefined && !asStringArray(root.config_changes)) {
+    problems.push("字段 config_changes 应为 string[]");
+  }
   return problems;
 }
 

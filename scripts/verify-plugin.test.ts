@@ -128,6 +128,36 @@ describe("src/gates.ts 单元层", () => {
       expect(parsed.completed_rings).toEqual(["spec"]);
     } finally { fx.cleanup(); }
   });
+
+  test("pipelineState update 合法 config_changes 写入后回读一致", () => {
+    const fx = makeFixture();
+    try {
+      const state = join(fx.dir, ".scratch", "demo", "pipeline-state.json");
+      const valid = JSON.stringify({
+        feature: "demo",
+        current_ring: "coder",
+        completed_rings: ["spec"],
+        config_changes: [
+          "quality.yml: +languages.typescript.test=npm test",
+          "user accepted: 前端验证缺口(未配置 e2e playwright)",
+        ],
+      });
+      const w = pipelineState("update", [state, valid]);
+      expect(w.exitCode).toBe(0);
+      const r = pipelineState("read", [state]);
+      expect(r.exitCode).toBe(0);
+      const parsed = JSON.parse(r.lines.join("\n"));
+      expect(parsed.config_changes).toEqual([
+        "quality.yml: +languages.typescript.test=npm test",
+        "user accepted: 前端验证缺口(未配置 e2e playwright)",
+      ]);
+    } finally { fx.cleanup(); }
+  });
+
+  test("pipelineState update config_changes 类型错误 exit=2", () => {
+    const r = pipelineState("update", ["/tmp/x.json", '{"feature":"a","current_ring":"coder","completed_rings":[],"config_changes":"not-array"}']);
+    expect(r.exitCode).toBe(2);
+  });
 });
 
 /* ============================== 集成层:官方 loadExtensions 通道 ============================== */
