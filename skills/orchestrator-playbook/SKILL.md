@@ -64,7 +64,7 @@ qa_pipeline_state  op=update state_path=.scratch/<feature>/pipeline-state.json j
 ```
 
 字段:feature / feature_name / requirement / current_ring(下一环)/ completed_rings /
-skipped / gates(每环 cmd+exit+evidence)/ paths / backprop_budget_left /
+skipped / gates(每环 cmd+exit+evidence;G4 的 evidence 须写明实际用的 e2e 面,机读审计可追溯"该 feature 用哪面验证的")/ paths / backprop_budget_left /
 config_changes(quality.yml 变更或用户接受的验证缺口,G0 处置 config_gaps 后写入)。
 写入由 CLI 做 schema 校验,防手写漂移。
 
