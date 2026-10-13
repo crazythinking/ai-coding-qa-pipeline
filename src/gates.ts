@@ -10,7 +10,7 @@
  * {spec_path}/{qa_flow_path}/{diff_source_paths} 等占位符由主会话代入。
  */
 
-import { readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse as parseYaml } from "yaml";
@@ -326,6 +326,67 @@ function collectGates(root: Record<string, unknown>): GateEntry[] {
   return gates;
 }
 
+/** 取门禁命令的首词工具名。shell 内建 cd 不在 PATH(`which cd` 必失败),故剥离 `cd <path> && ` 前缀
+ *  (可循环,路径支持引号)后再取首词——doctor 只认可 PATH 可寻的执行文件。 */
+function leadingTool(cmd: string): string {
+  let rest = cmd.trim();
+  for (;;) {
+    const m = rest.match(/^cd\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S+)\s*&&\s+/);
+    if (!m) break;
+    rest = rest.slice(m[0].length).trim();
+  }
+  return rest.split(/\s+/)[0];
+}
+
+/** e2e 取值合法性:null(单值=不启用)或 ∈ {cli,http,playwright}。
+ *  支持 YAML 数组或逗号分隔字符串(多 feature 多交互面:项目可用面集合)。非法返回描述,合法返回 null。 */
+function validateE2e(value: unknown): string | null {
+  const ALLOWED = ["cli", "http", "playwright"];
+  if (value === null || value === undefined) return null;
+  const vals: string[] = [];
+  if (typeof value === "string") {
+    vals.push(...value.split(",").map((s) => s.trim()).filter(Boolean));
+  } else if (Array.isArray(value)) {
+    if (!value.every((v) => typeof v === "string")) return "e2e 数组元素应为字符串(cli|http|playwright)";
+    vals.push(...(value as string[]));
+  } else {
+    return "e2e 应为字符串(单值/逗号分隔)、数组或 null";
+  }
+  if (vals.length === 0) return "e2e 不能为空";
+  for (const v of vals) {
+    if (!ALLOWED.includes(v)) return `e2e 取值非法: "${v}"(应为 cli|http|playwright 之一)`;
+  }
+  return null;
+}
+
+/** npm 包级深度前置检查(node 生态门禁命令的隐式依赖;与 lang-profiles "门禁前置要求"表对应)。
+ *  只按命令形态显式匹配,不做 npx→npm ls 通用推断(全局工具会误报)。缺失返回 [{label, hint}]。 */
+const DEEP_PRE_HINTS: Record<string, string> = {
+  "@vitest/coverage-v8": "npm i -D @vitest/coverage-v8",
+  "@stryker-mutator/core": "npm i -D @stryker-mutator/core",
+  "stryker.conf.js": "模板 skills/pipeline-setup/references/templates/stryker.conf.js(pipeline-setup 第 2.5 步可落地)",
+};
+
+function deepPreChecks(gateLabel: string, cmd: string, cwd: string): Array<{ missingLabel: string; hint: string }> {
+  const missing: Array<{ missingLabel: string; hint: string }> = [];
+  const deps: string[] = [];
+  const files: string[] = [];
+  if (/vitest/.test(cmd) && /--coverage/.test(cmd)) deps.push("@vitest/coverage-v8"); // vitest --coverage 隐式依赖
+  if (/stryker/.test(cmd)) {
+    deps.push("@stryker-mutator/core");
+    files.push("stryker.conf.js");
+  }
+  for (const dep of deps) {
+    if (!existsSync(join(cwd, "node_modules", dep))) {
+      missing.push({ missingLabel: `${gateLabel} 缺 npm 包 ${dep}`, hint: DEEP_PRE_HINTS[dep] ?? `npm i -D ${dep}` });
+    }
+  }
+  for (const f of files) {
+    if (!existsSync(join(cwd, f))) missing.push({ missingLabel: `${gateLabel} 缺配置 ${f}`, hint: DEEP_PRE_HINTS[f] ?? `需项目内 ${f}` });
+  }
+  return missing;
+}
+
 export interface DoctorOutcome {
   lines: string[];
   exitCode: number;
@@ -362,6 +423,11 @@ export function doctor(qPath: string, cwd = process.cwd()): DoctorOutcome {
   }
 
   let ok = 0, missing = 0, skipped = 0;
+  const e2eErr = validateE2e(root.e2e);
+  if (e2eErr) {
+    lines.push(`[CONFIG] quality.yml ${e2eErr}`);
+    return { lines, exitCode: 2, ok, missing, skipped };
+  }
   lines.push(`[doctor] 读取 ${resolved}`);
   for (const gate of collectGates(root)) {
     if (gate.cmd === null) {
@@ -369,11 +435,19 @@ export function doctor(qPath: string, cwd = process.cwd()): DoctorOutcome {
       skipped++;
       continue;
     }
-    const tool = gate.cmd.trim().split(/\s+/)[0];
+    const tool = leadingTool(gate.cmd);
     const found = spawnSync("which", [tool], { encoding: "utf8", cwd }).status === 0;
     if (found) {
-      lines.push(`[OK]       ${gate.label.padEnd(16)} ${tool}`);
-      ok++;
+      const deep = deepPreChecks(gate.label, gate.cmd, cwd);
+      if (deep.length > 0) {
+        for (const d of deep) {
+          lines.push(`[MISSING-DEP] ${gate.label.padEnd(11)} ${d.missingLabel}   → ${d.hint}`);
+          missing++;
+        }
+      } else {
+        lines.push(`[OK]       ${gate.label.padEnd(16)} ${tool}`);
+        ok++;
+      }
     } else {
       const hint = INSTALL_HINTS[tool] ?? "请安装该工具并加入 PATH";
       lines.push(`[MISSING]  ${gate.label.padEnd(16)} ${tool}   → ${hint}`);

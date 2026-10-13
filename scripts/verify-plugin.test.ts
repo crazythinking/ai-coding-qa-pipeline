@@ -97,6 +97,80 @@ describe("src/gates.ts 单元层", () => {
     expect(r.lines.some((l) => l.includes("未找到质量配置"))).toBe(true);
   });
 
+  test("doctor 剥离 cd && 前缀,首词取真实工具(修复内建 cd 误报)", () => {
+    const fx = makeFixture();
+    try {
+      const q = fx.write("quality.yml", "e2e: null\nlanguages:\n  sh:\n    test: cd subdir && cat\n");
+      const r = doctor(q);
+      const joined = r.lines.join("\n");
+      expect(r.exitCode).toBe(0, joined);
+      expect(joined).toContain("[OK]       sh.test");
+      expect(joined).not.toContain("[MISSING]  sh.test cd");
+    } finally { fx.cleanup(); }
+  });
+
+  test("doctor 深度前置:vitest --coverage 缺 @vitest/coverage-v8 报 MISSING-DEP exit=2(修复假绿)", () => {
+    const fx = makeFixture();
+    try {
+      const q = fx.write(
+        "quality.yml",
+        "e2e: null\nlanguages:\n  typescript:\n    test: cat\n    coverage: npx vitest run --coverage\n",
+      );
+      const r = doctor(q);
+      const joined = r.lines.join("\n");
+      expect(r.exitCode).toBe(2, joined);
+      expect(joined).toContain("[MISSING-DEP]");
+      expect(joined).toContain("@vitest/coverage-v8");
+    } finally { fx.cleanup(); }
+  });
+
+  test("doctor 深度前置:stryker 缺 @stryker-mutator/core 与 conf.js 双报 MISSING-DEP", () => {
+    const fx = makeFixture();
+    try {
+      const q = fx.write("quality.yml", "e2e: null\nlanguages:\n  typescript:\n    test: cat\n    mutation: npx stryker run\n");
+      const r = doctor(q);
+      const joined = r.lines.join("\n");
+      expect(r.exitCode).toBe(2, joined);
+      expect(joined).toContain("@stryker-mutator/core");
+      expect(joined).toContain("stryker.conf.js");
+    } finally { fx.cleanup(); }
+  });
+
+  test("doctor 深度前置:依赖在 node_modules/配置在项目根时报 OK 不误报", () => {
+    const fx = makeFixture();
+    try {
+      mkdirSync(join(fx.dir, "node_modules", "@vitest", "coverage-v8"), { recursive: true });
+      writeFileSync(join(fx.dir, "node_modules", "@vitest", "coverage-v8", "package.json"), "{}");
+      mkdirSync(join(fx.dir, "node_modules", "@stryker-mutator", "core"), { recursive: true });
+      writeFileSync(join(fx.dir, "node_modules", "@stryker-mutator", "core", "package.json"), "{}");
+      writeFileSync(join(fx.dir, "stryker.conf.js"), "export default {};\n");
+      const q = fx.write(
+        "quality.yml",
+        "e2e: null\nlanguages:\n  typescript:\n    test: cat\n    coverage: npx vitest run --coverage\n    mutation: npx stryker run\n",
+      );
+      const r = doctor(q, fx.dir);
+      const joined = r.lines.join("\n");
+      expect(r.exitCode).toBe(0, joined);
+      expect(joined).toContain("[OK]       typescript.coverage");
+      expect(joined).toContain("[OK]       typescript.mutation");
+    } finally { fx.cleanup(); }
+  });
+
+  test("doctor e2e 多值:单值/数组/逗号分隔合法,非法取值 exit=2", () => {
+    const fx = makeFixture();
+    try {
+      const body = "languages:\n  sh:\n    test: cat\n";
+      expect(doctor(fx.write("q-single.yml", "e2e: cli\n" + body)).exitCode).toBe(0);
+      expect(doctor(fx.write("q-null.yml", "e2e: null\n" + body)).exitCode).toBe(0);
+      expect(doctor(fx.write("q-arr.yml", "e2e: [cli, playwright]\n" + body)).exitCode).toBe(0);
+      expect(doctor(fx.write("q-csv.yml", 'e2e: "cli, playwright"\n' + body)).exitCode).toBe(0);
+      const rb = doctor(fx.write("q-bad.yml", "e2e: foo\n" + body));
+      expect(rb.exitCode).toBe(2);
+      expect(rb.lines.join("\n")).toContain("[CONFIG]");
+      expect(doctor(fx.write("q-badnull.yml", "e2e: [cli, null]\n" + body)).exitCode).toBe(2);
+    } finally { fx.cleanup(); }
+  });
+
   test("pipelineState read 无状态文件输出 {} exit=0", () => {
     const r = pipelineState("read", ["/nonexistent/state.json"]);
     expect(r.exitCode).toBe(0);
