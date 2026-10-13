@@ -94,18 +94,24 @@ quality.yml 命令字符串仍是协议事实源(doctor 按首词查在位性、
 2. **集成层**:用官方 `loadExtensions()`(来自 `@oh-my-pi/pi-coding-agent/extensibility/extensions`)
    加载插件 extension,断言无加载错误 + 4 个门禁工具注册,然后直接调用每个工具的
    `ToolDefinition.execute()`(不经 LLM、离线、确定性),断言返回内容与 exitCode 与 CLI 语义一致;
-3. **安装层(发布冒烟)**:`omp plugin install <tarball>` —— omp 官方 `validateInstalledExtensions`
-   在安装时即验证 extension 可解析/import/初始化,失败自动回滚安装。
+3. **安装层(发布冒烟)**:npm 分发时 `omp plugin install <npm包名>` —— omp 官方
+   `validateInstalledExtensions` 在安装时即验证 extension 可解析/import/初始化,失败自动回滚;
+   本地改动副本不重装,对副本跑集成层 loadExtensions 等效验证(见"开发"节)。
 
 ```bash
 bun install                    # 首次:装依赖 + devDependencies(官方 SDK,仅测试用)
-bun run verify                 # 15 项断言:单元 8 + 集成 7,全绿才可发布
-omp plugin install <tarball>   # 安装冒烟(官方安装时 extension 校验)
+bun run verify                 # 单元层 + 集成层全绿才可发布
+# 本地重装(开发循环):打包 tarball → 解包覆盖 ~/.omp/plugins/node_modules/ai-coding-qa-pipeline/
+# 然后对副本跑 verify 集成层(loadExtensions)验证 extension 与 4 工具
 ```
 
 ## 开发
 
-- 改 agent 正文 / extension / skill 后:`omp plugin install <tarball> --force` 重装(或重启会话使发现刷新)。
+- 改 agent 正文 / extension / skill 后:重打 tarball 解包覆盖安装副本
+  `~/.omp/plugins/node_modules/ai-coding-qa-pipeline/`(实测:omp 18.x `omp plugin install` 对
+  本地路径走 link、tarball 参数会被当目录读而 ENOTDIR;仅 npm 分发支持干净重装),之后用
+  `bun run verify` 的集成层对副本 loadExtensions 验证(load errors=0 + 4 工具注册);或重启
+  会话使发现刷新。
 - 门禁逻辑在 `src/gates.ts`(单一事实源),`bin/` 薄壳与 `extensions/index.ts` 都复用它;改门禁只改 gates.ts。
 - 改 qa-flow 模板时,`src/gates.ts` 的 `REQUIRED_QA_HEADER` 与 spec-definer.md 正文模板**必须同步**。
 - 四个执行 agent 经 `autoload-skills` 挂 `skills/*-playbook/SKILL.md`;改技能与 agent 正文时避免同一规则两处表述(双源漂移)。
