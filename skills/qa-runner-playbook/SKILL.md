@@ -8,6 +8,8 @@ description: Use when converting a QA flow document into executable end-to-end v
 
 ## 交互面(由 quality.yml 的 e2e 声明决定)
 
+- `e2e` 可为单值或多值(YAML 数组/逗号分隔)——**多值 = 项目可用面集合**;按 qa-flow.md 的
+  实际操作选面:集合内直接执行,超出集合回主会话与用户确认,不自行扩大。
 - **cli 面**:以真实使用者参数执行命令,断言 stdout/stderr、退出码、文件与状态副作用
   (运维脚本的"用户视角" = 按文档敲命令能得到文档说的结果)。
 - **http 面**:发送真实请求,断言响应体、状态码与状态变化。

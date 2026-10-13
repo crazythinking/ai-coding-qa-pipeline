@@ -22,6 +22,11 @@ pipeline-setup 技能第 0 步探测时引用。**全部为"建议,非断言"**�
 
 ## 使用要点
 
+- **typescript 键 = package.json/npm 生态驱动的 JS/TS 栈(含纯 JS 前端)**:语言键名统一用
+  `typescript`,无独立 node/javascript 键——纯 JS 项目同样落此键,命令经 npm/npx 执行。
+- **typescript 行两次出现 eslint 是有意的**:complexity 用 eslint 内置复杂度规则
+  (`--rule complexity: [error, 10]`)做函数圈复杂度门禁(等价 java=PMD cyclomatic / go=gocyclo);
+  arch/lint 用 dependency-cruiser 查依赖约束 + eslint 做 lint——查的是不同维度。
 - Q4 变异工具:Python 推荐 `mutmut`;无对应工具的语言默认 `null`(告知后果 = 对应环 G3 跳过)。
 - Q3 架构约束:有契约文件直接采用;没有时 Python 推荐从 `references/templates/import-linter-setup.cfg` 落地契约初始化(替换 `<pkg>` 为根包名)。
 - CRAP 公式语言无关(comp²×(1−cov/100)³+comp,即复杂度×覆盖率联合惩罚),**当前插件仅实现
@@ -47,3 +52,7 @@ setup 侦测到前置缺失/不完整/不准确时,告知用户该门禁后果,�
 | `pitest` | java | pom 配 pitest 插件参数 | 空转 | 引导生成同片段 pitest 部分(B 类,询问) |
 | `arch-unit` | java | 项目内 ArchUnit 测试类 | 无断言零检查 | 引导生成 `templates/arch-unit-test.java` 骨架(B 类,询问,pom 加 archunit-junit5) |
 | `vitest --coverage` | ts | `@vitest/coverage-v8` 包 | 缺包直接报错;doctor 查命令首词查不到 npm 包 | npm 依赖(B 类,doctor 报环境问题,仅给安装提示) |
+
+> doctor 已按命令形态内置上述 node 栈深度检查(2026-10-13):命令含 `vitest` 且 `--coverage` →
+> 查 `node_modules/@vitest/coverage-v8`;命令含 `stryker` → 查 `@stryker-mutator/core` 与
+> `stryker.conf.js`;缺失报 `[MISSING-DEP]` + 安装/模板提示,exit=2——不再"首词在位即 OK"假绿。

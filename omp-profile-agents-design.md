@@ -222,8 +222,8 @@ coverage_target: 100
 architect_signal:      # architect派发阈值(§6触发信号)
   new_files: 3         # 新建文件数≥3
   modules_touched: 3   # 触碰顶层模块数≥3
-e2e: cli               # 项目可用验证面(默认面): cli|http|playwright|null(null=G4跳过,终点G3)
-                       # feature 级 G4 实际面按该 feature 的 qa-flow 交互面选,超出声明面与用户确认(2026-10-13)
+e2e: cli               # 项目可用验证面集合(默认面): cli|http|playwright|null,支持多值(YAML数组/逗号分隔);null=G4跳过,终点G3
+                       # feature 级 G4 实际面按该 feature 的 qa-flow 交互面选,超出声明集合与用户确认(2026-10-13 定多值)
 spec:                  # G0规格门禁(spec-definer产出,主会话派发后、人类审查前亲自跑;见§3①)
   check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}   # 插件CLI,全局可用:L1+L2+qa-flow模板
 languages:
@@ -242,7 +242,7 @@ languages:
     complexity: mvn -q pmd:check   # PMD cyclomatic/NPath 真圈复杂度(ruleset 用 pipeline-setup templates/pmd-ruleset.xml 落地;spotbugs 是静态 bug 检测非复杂度)
     mutation: mvn -q org.pitest:pitest-maven:mutationCoverage -DwithHistory
     arch: mvn -q arch-unit
-  # 已定:typescript(stryker/depcruise)、go(gremlins/depguard)、rust(cargo-mutants);完整命令表见 skills/pipeline-setup/references/lang-profiles.md
+  # 已定:typescript(stryker/depcruise;typescript 键=package.json/npm 生态栈,含纯 JS 前端,无独立 node 键)、go(gremlins/depguard)、rust(cargo-mutants);完整命令表见 skills/pipeline-setup/references/lang-profiles.md
 ```
 
 **占位符约定**(§5.1 生成 quality.yml 时强制,命令不得写死具体文件路径——quality.yml 对所有 feature 稳定):

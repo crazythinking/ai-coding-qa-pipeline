@@ -31,7 +31,7 @@ description: Use when initializing ai-coding-qa-pipeline quality gates for a pro
 - Q2 各语言的测试命令?(默认 = 建议表候选或项目已有配置)
 - Q3 架构约束命令?(有契约文件 → 直接采用;没有 → 问是否初始化,Python 推荐 import-linter 模板)
 - Q4 变异测试工具?(Python 推荐 mutmut;无对应工具的语言默认 `null` 并告知后果 = G3 跳过)
-- Q5 e2e 验证交互面?(`cli` | `http` | `playwright` | `null`;运维脚本类推荐 cli,无系统级验证面选 null = G4 跳过)
+- Q5 e2e 验证交互面?(`cli` | `http` | `playwright` | `null`;运维脚本类推荐 cli,无系统级验证面选 null = G4 跳过;多 feature 多面可用多值,如 `cli, playwright`)
 - Q6 scope 与阈值?(推荐 `diff` / `6` / `100`)
 
 原则:探测只产生候选,决定权在问答——**禁止"探测后回填"**。
@@ -58,7 +58,7 @@ coverage_target: 100
 architect_signal:      # architect 派发阈值(§6 触发信号)
   new_files: 3         # 新建文件数≥3
   modules_touched: 3   # 触碰顶层模块数≥3
-e2e: cli               # qa-runner 交互面: cli|http|playwright|null(null=G4跳过,终点G3)
+e2e: cli               # 可用验证面(默认面): cli|http|playwright|null;支持多值(YAML 数组/逗号分隔,如 [cli, playwright]);null=G4跳过,终点G3
 spec:                  # G0 规格门禁(主会话派发 spec-definer 后亲自跑)
   check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}
 languages:

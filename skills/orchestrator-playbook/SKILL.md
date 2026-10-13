@@ -36,7 +36,7 @@ qa_pipeline_state  op=read state_path=<state.json>
 4. **G2 清理**:派 `cleaner` → 跑 `complexity` + 复跑 `test`/`arch`。
 5. **architect 信号检测**:新建文件数 ≥ 阈值、或 cleaner 上报 structural_changes 非空、或改了架构约束文件 → 派 `architect`(跑 `arch`+`test`);无信号则跳过(默认路径)。
 6. **G3 强化**:派 `reinforcer` → 跑 `mutation`(diff 范围)+ `coverage`。
-7. **G4 QA**:`e2e` 非 null 才派 `qa-runner`;null 则终点 G3。**e2e 面按 feature 实际交互面选**:quality.yml 的 `e2e` 声明项目当前可用的验证面(默认面);实际面由本 feature 的 qa-flow.md 决定(cli/http/playwright),超出声明面 → 与用户确认后执行。
+7. **G4 QA**:`e2e` 非 null 才派 `qa-runner`;null 则终点 G3。**e2e 面按 feature 实际交互面选**:quality.yml 的 `e2e` 声明项目当前可用的验证面集合(默认面;支持多值:数组或逗号分隔,如 `[cli, playwright]`);实际面由本 feature 的 qa-flow.md 决定(cli/http/playwright),超出声明集合 → 与用户确认后执行。
 8. **每环门禁通过后**:写编排状态(见下)+ 阶段提交(git 项目,可选)。
 
 任一环连续 3 次门禁失败 → 中止,输出失败环 + 证据 + 建议,交回用户。
