@@ -8,7 +8,7 @@ pipeline-setup 技能第 0 步探测时引用。**全部为"建议,非断言"**�
 `null` = 该语言不启用该维度门禁(对应环跳过:如 mutation:null → reinforcer 跳过并上报 skipped_reason)。
 
 命令一律用**占位符**表达随 feature 变化的部分(`{diff_source_paths}` 源码 / `{diff_test_paths}` 测试,
-由主会话执行门禁前从 git diff 注入;`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入),
+由主会话执行门禁前从 git diff 注入;`{requirement_path}`/`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入),
 **不写死具体文件路径**——这样 quality.yml 对所有 feature 稳定。空集时主会话用整目录兜底或跳过并在报告中说明。
 
 | 语言 | 构建文件 | test | coverage | complexity | mutation | arch/lint |

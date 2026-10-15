@@ -28,10 +28,30 @@ qa_pipeline_state  op=read state_path=<state.json>
 ## 主流程
 
 1. **定位**:确认这是完整开发流程;读 `.omp/quality.yml`;无则先跑 `pipeline-setup` 初始化。
-2. **G0 规格**:派 `spec-definer`(需求文档)→ 主会话亲自跑 `spec.check`(代入 `{spec_path}`/`{qa_flow_path}`)→ 若 output.config_gaps 非空,**主会话亲自读 `.omp/quality.yml` 复核**(不信 agent 自报)→ 打印 spec 路径 + 缺口清单,**暂停请用户决策(纯语义卡点,与规格确认同一卡点)**:
-   - **A 补齐**:按 `skills/pipeline-setup/references/lang-profiles.md` 对应语言行生成 quality.yml 缺失段(`languages.<lang>` 的 test/lint/complexity;mutation 无工具默认 null 并告知后果=G3 跳过),跑 `doctor` 冒烟;缺 npm 包等环境依赖 → 给安装提示,用户装后重跑 doctor;变更写入 pipeline-state 的 `config_changes`。
-   - **B 接受缺口**:用户确认该部分本 feature 不做门禁验证 → 记入 `config_changes`(如 "user accepted: 前端无 e2e 验证"),流水线继续。
-   - 缺口 `uncertain: true`(证据不足,语言栈未定)→ 先问用户该栈是什么语言,再按 A 补齐。
+2. **G0 规格 + 人工审查(流水线唯一必经人工卡点)**:派 `spec-definer`(需求文档,须含本阶段落地清单)→
+   主会话亲自跑 `spec.check`(代入 `{requirement_path}`/`{spec_path}`/`{qa_flow_path}`)→ 若 output.config_gaps
+   非空,**主会话亲自读 `.omp/quality.yml` 复核**(不信 agent 自报)→ **陈列审查材料** → **暂停请用户决策(纯语义卡点)**:
+
+   **陈列材料**(用户核对语义,不靠用户自己翻文件):
+   - requirement.md 验收项逐条清单:`R1..Rn` 全文,含"不做"项及其理由
+   - spec.feature 场景列表:每场景名 + 其 `@R` 映射(机器已确认闭环,呈现给人类做语义核对)
+   - qa-flow.md 步骤摘要(用户视角操作序列,供确认 E2E 面)
+   用户核对两问:① 验收项是否齐全(需求是否被裁剪) ② 每个场景的预期结果是否符合需求语义。
+
+   **处置**(机器 FAIL 与人类驳回分开计数):
+   - **缺口决策 A/B**(config_gaps):A 按 `skills/pipeline-setup/references/lang-profiles.md` 对应语言行生成
+     quality.yml 缺失段(`languages.<lang>` 的 test/lint/complexity;mutation 无工具默认 null 并告知后果=G3
+     跳过),跑 `doctor` 冒烟;缺 npm 包等环境依赖 → 给安装提示,用户装后重跑 doctor;B 用户确认该部分
+     本 feature 不做门禁验证 → 记入 `config_changes`(如 "user accepted: 前端无 e2e 验证");缺口
+     `uncertain: true`(证据不足,语言栈未定)→ 先问用户该栈是什么语言,再按 A 补齐。
+   - **机器门禁 FAIL**(孤儿验收项/孤儿场景/引用不存在的或已"不做"的验收项等):说明需求被裁剪或场景缺溯源
+     → 要求 spec-definer 重写补齐(需求正文中出现的行为必须落验收项,不做项须有输入文档显式理由),重跑 G0;
+     属机器门禁,计入"连续 3 次失败"预算,不得跳过门禁。
+   - **人审不通过**(语义问题,机器测不出):携人类意见派 spec-definer 重写 → 重跑 G0(含需求一致性)→
+     回到本卡点重审;**不占机器门禁重试预算**(主观审查不适用"3 次失败中止"),但主会话应限制往返,
+     超 3 轮仍不一致 → 中止交回用户。
+   - **人审通过** → 写 pipeline-state `human_review: "user approved: <feature> spec @<时间>"`
+     (与 config_changes 同批 update;此字段即"人工审查已过"的审计证据,恢复时据此判定 G0 已结)。
 3. **G1 编码**:用户确认后派 `coder` → 主会话亲自跑该语言 `test`(注入占位符)→ 失败让 coder 同环修(≤3 轮)。
 4. **G2 清理**:派 `cleaner` → 跑 `complexity` + 复跑 `test`/`arch`。
 5. **architect 信号检测**:新建文件数 ≥ 阈值、或 cleaner 上报 structural_changes 非空、或改了架构约束文件 → 派 `architect`(跑 `arch`+`test`);无信号则跳过(默认路径)。
@@ -45,13 +65,13 @@ qa_pipeline_state  op=read state_path=<state.json>
 
 - **编排者与执行者分离**:门禁一律主会话亲自执行验证,绝不采信执行 agent 的 `gate_results` 自报。
 - **工具优先(推荐)**:本插件安装后注册 4 个门禁工具,主会话直接调用(无需 CLI 进 PATH):
-  - `qa_spec_check` — G0 规格门禁(参数 `spec_path` + `qa_flow_path`)
+  - `qa_spec_check` — G0 规格门禁(参数 `spec_path` + `qa_flow_path` + `requirement_path` 可选)
   - `qa_crap_check` — CRAP 组合器(参数 `threshold` 可选、`paths` 可选)
   - `qa_doctor` — 环境冒烟(参数 `quality_yml_path` 可选)
   - `qa_pipeline_state` — 编排状态读/写(参数 `op` + `state_path` + `json`)
   工具与 CLI 共享同一套核心逻辑(src/gates.ts),退出码语义一致。quality.yml 里的命令字符串仍保留
   作为协议事实源与独立 CLI 场景;插件已装时主会话**优先用工具**,命令字符串仅在无工具环境回退。
-- **占位符注入**:执行前从 `git diff` 计算本次 feature 的 diff 文件集,注入 `{diff_source_paths}`(源码,非测试)/ `{diff_test_paths}`(测试);`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。占位符集为空 → 整目录兜底或跳过,报告中说明。工具调用时把占位符实参直接作为工具参数。
+- **占位符注入**:执行前从 `git diff` 计算本次 feature 的 diff 文件集,注入 `{diff_source_paths}`(源码,非测试)/ `{diff_test_paths}`(测试);`{requirement_path}`/`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。占位符集为空 → 整目录兜底或跳过,报告中说明。工具调用时把占位符实参直接作为工具参数。
 - **退出码语义**:0=通过;1=不合格(该环失败,同环重试/回传);2=环境问题(工具缺失,不重试 agent,装工具或置 null 后重跑)。工具返回的 `details.exitCode` 即该语义。
 
 ## 写编排状态(每环通过后,ADR-0001)
@@ -65,7 +85,8 @@ qa_pipeline_state  op=update state_path=.scratch/<feature>/pipeline-state.json j
 
 字段:feature / feature_name / requirement / current_ring(下一环)/ completed_rings /
 skipped / gates(每环 cmd+exit+evidence;G4 的 evidence 须写明实际用的 e2e 面,机读审计可追溯"该 feature 用哪面验证的")/ paths / backprop_budget_left /
-config_changes(quality.yml 变更或用户接受的验证缺口,G0 处置 config_gaps 后写入)。
+config_changes(quality.yml 变更或用户接受的验证缺口,G0 处置 config_gaps 后写入)/
+human_review(G0 人工规格卡点审计:string=审查结论如 "user approved: <feature> spec @<时间>",null=未到/未过卡点;人审通过时与 config_changes 同批写入)。
 写入由 CLI 做 schema 校验,防手写漂移。
 
 - **粒度 = 环间续跑**:状态只记录"已完成到哪一环",不承诺环内恢复(环是 fresh 子代理,环内失败已靠失败报告交接)。

@@ -3,8 +3,11 @@
  * ai-coding-qa-pipeline — 六-agent 开发流水线的门禁 CLI。
  *
  * 子命令:
- *   spec-check <spec.feature> <qa-flow.md>   G0 门禁:L1 语法(官方 @cucumber/gherkin)
- *                                              + L2 结构(每场景三类步骤)+ qa-flow 固定模板
+ *   spec-check [--requirement <requirement.md>] <spec.feature> <qa-flow.md>
+ *                                           G0 门禁:L1 语法(官方 @cucumber/gherkin)
+ *                                             + L2 结构(每场景三类步骤)+ qa-flow 固定模板;
+ *                                             传 --requirement 时追加需求一致性校验
+ *                                             (需求基线验收项 ↔ 场景 @R<n> 标签,双向无孤儿)
  *   crap-check [--threshold N] [paths...]     CRAP 组合器:radon cc + coverage json → CRAP 公式
  *                                               (不自造分析,复杂度完全由 radon 承担)
  *   doctor [quality.yml路径]                  §5.1冒烟验证:按声明逐条查门禁工具在位性
@@ -20,7 +23,8 @@ import { specCheck, crapCheck, doctor, pipelineState } from "../src/gates.ts";
 const HELP =
   "ai-coding-qa-pipeline — 六-agent 流水线门禁 CLI\n" +
   "用法: ai-coding-qa-pipeline <子命令> [参数]\n" +
-  "  spec-check <spec.feature> <qa-flow.md>   G0 规格门禁(L1语法+L2结构+qa-flow模板)\n" +
+  "  spec-check [--requirement <requirement.md>] <spec.feature> <qa-flow.md>\n" +
+  "                                           G0 规格门禁(L1语法+L2结构+qa-flow模板+需求一致性)\n" +
   "  crap-check [--threshold N] [paths...]     CRAP 组合器(radon+coverage)\n" +
   "  doctor [quality.yml路径]                  §5.1冒烟验证:按声明逐条查门禁工具在位性\n" +
   "  pipeline-state read|update <state.json> [json]\n" +
@@ -31,12 +35,25 @@ const cmd = process.argv[2] ?? "";
 let result: { lines: string[]; exitCode: number } | undefined;
 
 if (cmd === "spec-check") {
-  const args = process.argv.slice(3);
+  let requirementPath: string | undefined;
+  const args: string[] = [];
+  for (let i = 3; i < process.argv.length; i++) {
+    const a = process.argv[i];
+    if (a === "--requirement" || a === "-r") {
+      requirementPath = process.argv[++i];
+      if (!requirementPath) {
+        console.log("--requirement 需要参数值(需求基线 requirement.md 路径)");
+        process.exit(2);
+      }
+    } else {
+      args.push(a);
+    }
+  }
   if (args.length !== 2) {
-    console.log("用法: ai-coding-qa-pipeline spec-check <spec.feature> <qa-flow.md>");
+    console.log("用法: ai-coding-qa-pipeline spec-check [--requirement <requirement.md>] <spec.feature> <qa-flow.md>");
     process.exit(2);
   }
-  result = specCheck(args[0], args[1]);
+  result = specCheck(args[0], args[1], process.cwd(), requirementPath);
 } else if (cmd === "crap-check") {
   let threshold = 6;
   const paths: string[] = [];

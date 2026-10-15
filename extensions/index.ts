@@ -5,7 +5,7 @@
  * 无需门禁 CLI 进入系统 PATH(替代旧的 `bun link` 第二段安装)。
  *
  * 工具:
- *   qa_spec_check      G0 规格门禁(L1 语法 + L2 结构 + qa-flow 模板)
+ *   qa_spec_check      G0 规格门禁(L1 语法 + L2 结构 + qa-flow 模板 + 需求一致性校验)
  *   qa_crap_check      CRAP 组合器(radon cc + coverage json)
  *   qa_doctor          按 quality.yml 声明逐条查门禁工具在位性
  *   qa_pipeline_state  编排状态读/写(ADR-0001,环间恢复+审计)
@@ -61,13 +61,22 @@ export default function extension(pi: MinExtensionAPI) {
     label: "Spec Check (G0)",
     description:
       "运行 G0 规格门禁:校验 spec.feature 的 Gherkin 语法(L1)与每场景三类步骤结构(L2)," +
-      "并校验 qa-flow.md 符合固定模板。退出码 0=通过 1=不合格 2=参数/文件错误。",
+      "并校验 qa-flow.md 符合固定模板。传 requirement_path(需求基线 requirement.md)时追加" +
+      "需求一致性校验:requirement.md '## 验收项' 条目(- [Rn] … / - [Rn] 不做: 理由)↔" +
+      "spec.feature 场景 @R<n> 标签双向闭环——无孤儿验收项(需求被裁剪)、无孤儿场景(无需求来源)。" +
+      "退出码 0=通过 1=不合格 2=参数/文件错误。",
     parameters: z.object({
       spec_path: z.string(),
       qa_flow_path: z.string(),
+      requirement_path: z.string().optional(),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const r = specCheck(String(params.spec_path), String(params.qa_flow_path), ctx?.cwd);
+      const r = specCheck(
+        String(params.spec_path),
+        String(params.qa_flow_path),
+        ctx?.cwd,
+        params.requirement_path ? String(params.requirement_path) : undefined,
+      );
       return toContent(r.lines, r.exitCode);
     },
   });
@@ -112,7 +121,7 @@ export default function extension(pi: MinExtensionAPI) {
     description:
       "读/写 .scratch/<feature>/pipeline-state.json 编排状态(ADR-0001)。" +
       "op=read:输出当前状态 JSON;无状态文件输出 {}。op=update:<state_path>+<json> 带 schema 校验后写入。" +
-      "供主会话环间恢复与审计,执行 agent 不应调用。",
+      "供主会话环间恢复与审计,执行 agent 不应调用。字段含 human_review(string|null,G0 人工规格卡点审计,主会话写入)。",
     parameters: z.object({
       op: z.string(),
       state_path: z.string(),

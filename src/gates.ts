@@ -7,7 +7,8 @@
  * CLI 薄壳逐行打印并按 exitCode 退出;extension 工具拼接 content 并透传 exitCode。
  *
  * 设计依据: docs/omp-profile-agents-design.md §3①/§5。quality.yml 中
- * {spec_path}/{qa_flow_path}/{diff_source_paths} 等占位符由主会话代入。
+ * {requirement_path}/{spec_path}/{qa_flow_path}/{diff_source_paths} 等占位符由主会话代入。
+ * spec-check 传 requirement_path 时追加需求一致性校验(requirement.md 验收项 ↔ 场景 @R<n> 标签双向闭环)。
  */
 
 import { readFileSync, statSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -21,6 +22,7 @@ import { Parser, AstBuilder, GherkinClassicTokenMatcher, Errors } from "@cucumbe
 interface ScenarioLike {
   name?: string;
   steps?: StepLike[];
+  tags?: Array<{ name?: string }>;
 }
 interface StepLike {
   text?: string;
@@ -186,18 +188,125 @@ function checkQaFlow(path: string): { violations: string[]; fatal?: string } {
   return { violations, warns };
 }
 
-/** G0 规格门禁: L1 语法 + L2 结构 + qa-flow 固定模板。cwd 用于解析相对路径。 */
-export function specCheck(specPath: string, qaPath: string, cwd = process.cwd()): GateResult {
+/** 需求验收项条目:[Rn] 描述,或 [Rn] 不做: 理由(显式延后,不允许静默消失)。 */
+interface RequirementItem {
+  deferred: boolean;
+  reason: string;
+}
+
+const REQ_ITEM_RE = /^\s*-\s+\[(R\d+)\]\s*(.*)$/;
+const REQ_DEFER_RE = /^不做\s*[:：]\s*(.*)$/;
+
+/** 解析 requirement.md(需求基线)的 '## 验收项' 小节:
+ *  每条 `- [Rn] 描述` 为活动验收项;`- [Rn] 不做: <理由>` 为显式延后(理由必填)。
+ *  小节外正文(背景/范围等)不参与校验;小节内只允许条目行,防止验收项被静默写成散文。 */
+function checkRequirement(path: string): { items: Map<string, RequirementItem>; violations: string[]; fatal?: string } {
+  const violations: string[] = [];
+  let lines: string[];
+  try {
+    lines = readFileSync(path, "utf8").split(/\r?\n/);
+  } catch (e) {
+    return { items: new Map(), violations: [], fatal: `文件不可读: ${path} (${e instanceof Error ? e.message : String(e)})` };
+  }
+  const section = qaSection(lines, "## 验收项");
+  if (!section.length) {
+    violations.push("缺少 '## 验收项' 小节(需求基线必须逐条列出全部验收项)");
+    return { items: new Map(), violations };
+  }
+  const items = new Map<string, RequirementItem>();
+  for (const line of section) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const m = REQ_ITEM_RE.exec(line);
+    if (!m) {
+      violations.push(`验收项小节存在非条目行: ${trimmed}`);
+      continue;
+    }
+    const id = m[1];
+    const text = m[2].trim();
+    const dm = REQ_DEFER_RE.exec(text);
+    if (dm) {
+      if (!dm[1].trim()) violations.push(`验收项 ${id} 标注不做但未给理由`);
+      if (items.has(id)) violations.push(`验收项 ${id} 重复定义`);
+      else items.set(id, { deferred: true, reason: dm[1].trim() });
+    } else {
+      if (!text) violations.push(`验收项 ${id} 描述为空`);
+      if (items.has(id)) violations.push(`验收项 ${id} 重复定义`);
+      else items.set(id, { deferred: false, reason: "" });
+    }
+  }
+  return { items, violations };
+}
+
+/** 场景的 @R<n> 验收项标签(其余标签不参与追溯)。 */
+function requirementRefs(sc: ScenarioLike): string[] {
+  const out: string[] = [];
+  for (const t of sc.tags ?? []) {
+    const m = /^@(R\d+)$/.exec((t.name ?? "").trim());
+    if (m) out.push(m[1]);
+  }
+  return out;
+}
+
+/** G0 规格门禁: L1 语法 + L2 结构 + qa-flow 固定模板;requirementPath 提供时追加
+ *  需求一致性校验(需求验收项 ↔ 场景 @R<n> 标签,双向无孤儿)。cwd 用于解析相对路径。 */
+export function specCheck(specPath: string, qaPath: string, cwd = process.cwd(), requirementPath?: string): GateResult {
   const lines: string[] = [];
   const { count, violations: specV, fatal: specFatal } = checkGherkin(resolvePath(cwd, specPath));
-  const { violations: qaV, fatal: qaFatal, warns } = checkQaFlow(resolvePath(cwd, qaPath));
+  const { violations: qaV, fatal: qaFatal } = checkQaFlow(resolvePath(cwd, qaPath));
   if (specFatal) { lines.push(`FAIL [spec] ${specFatal}`); return { lines, exitCode: 2 }; }
   if (qaFatal) { lines.push(`FAIL [qa-flow] ${qaFatal}`); return { lines, exitCode: 2 }; }
   for (const v of specV) lines.push(`FAIL [spec] ${v}`);
   for (const v of qaV) lines.push(`FAIL [qa-flow] ${v}`);
   if (count >= 0) lines.push(`INFO scenario_count=${count}`);
-  if (specV.length || qaV.length) return { lines, exitCode: 1 };
-  lines.push("PASS spec结构 + qa-flow模板 全部合规");
+
+  const traceV: string[] = [];
+  let coverageLine: string | undefined;
+  if (requirementPath) {
+    const req = checkRequirement(resolvePath(cwd, requirementPath));
+    if (req.fatal) { lines.push(`FAIL [requirement] ${req.fatal}`); return { lines, exitCode: 2 }; }
+    for (const v of req.violations) traceV.push(`[requirement] ${v}`);
+    // 双向闭环:每场景必须有 @R 来源;每个活动验收项必须被 ≥1 场景覆盖。
+    let specSource: string;
+    try {
+      specSource = readFileSync(resolvePath(cwd, specPath), "utf8");
+    } catch (e) {
+      lines.push(`FAIL [spec] 文件不可读: ${specPath} (${e instanceof Error ? e.message : String(e)})`);
+      return { lines, exitCode: 2 };
+    }
+    const feature = parseGherkin(specSource).feature;
+    const covered = new Set<string>();
+    for (const sc of collectScenarios(feature)) {
+      const scName = sc.name?.trim() || "(未命名)";
+      const refs = requirementRefs(sc);
+      if (!refs.length) {
+        traceV.push(`[spec] 场景 '${scName}' 无 @R<n> 验收项标注(孤儿场景,缺需求来源)`);
+        continue;
+      }
+      for (const id of refs) {
+        const item = req.items.get(id);
+        if (!item) traceV.push(`[spec] 场景 '${scName}' 引用了需求中不存在的验收项 ${id}`);
+        else if (item.deferred) traceV.push(`[spec] 场景 '${scName}' 引用了已标注不做的验收项 ${id}(与延后声明冲突)`);
+        else covered.add(id);
+      }
+    }
+    let deferred = 0;
+    const activeIds: string[] = [];
+    for (const [id, item] of req.items) {
+      if (item.deferred) deferred++;
+      else activeIds.push(id);
+    }
+    const missing = activeIds.filter((id) => !covered.has(id));
+    for (const id of missing) traceV.push(`[requirement] 验收项 ${id} 无对应场景(孤儿验收项,需求被裁剪)`);
+    coverageLine = `INFO coverage: 需求验收项 ${req.items.size} = 覆盖 ${covered.size} + 未覆盖 ${missing.length} + 显式不做 ${deferred}`;
+  }
+
+  for (const v of traceV) lines.push(`FAIL ${v}`);
+  if (coverageLine) lines.push(coverageLine);
+  if (specV.length || qaV.length || traceV.length) return { lines, exitCode: 1 };
+  lines.push(requirementPath
+    ? "PASS spec结构 + qa-flow模板 + 需求一致性(验收项↔场景闭环) 全部合规"
+    : "PASS spec结构 + qa-flow模板 全部合规");
   return { lines, exitCode: 0 };
 }
 
@@ -464,7 +573,8 @@ export function doctor(qPath: string, cwd = process.cwd()): DoctorOutcome {
  *  恢复粒度=环间续跑;schema 校验防主会话手写漂移;机读 JSON 亦人类可读=审计轨迹。
  *  字段:feature / feature_name / requirement / current_ring / completed_rings /
  *  skipped / gates / paths / backprop_budget_left / config_changes(quality.yml 变更
- *  或用户接受的验证缺口,由主会话在 G0 处置 config_gaps 后写入)。 */
+ *  或用户接受的验证缺口,由主会话在 G0 处置 config_gaps 后写入)/
+ *  human_review(G0 人工规格卡点审计,string|null:主会话在用户确认/驳回规格后写入)。 */
 const REQUIRED_STATE_FIELDS = ["feature", "current_ring", "completed_rings"] as const;
 const STRING_FIELDS = ["feature", "feature_name", "requirement", "current_ring"] as const;
 
@@ -494,6 +604,12 @@ function validateState(root: Record<string, unknown>): string[] {
   if (root.skipped !== undefined && !asRecord(root.skipped)) problems.push("字段 skipped 应为对象");
   if (root.config_changes !== undefined && !asStringArray(root.config_changes)) {
     problems.push("字段 config_changes 应为 string[]");
+  }
+  // human_review:G0 人工规格卡点审计——string=主会话写入的审查结论(如
+  // "user approved: <feature> spec @<时间>" / "user rejected: <理由>"),null=尚未审查,
+  // undefined=旧状态无此字段(兼容)。类型校验只认 string|null。
+  if (root.human_review !== undefined && root.human_review !== null && typeof root.human_review !== "string") {
+    problems.push("字段 human_review 应为 string 或 null");
   }
   return problems;
 }

@@ -12,9 +12,12 @@ feature 名与编排状态(当前环、已完成环、各环门禁证据)过去�
 - **恢复粒度 = 环间续跑,不承诺环内**:环是 fresh 子代理,环内恢复无额外价值(失败
   已靠失败报告交接);状态文件只保证"从已完成环的下一环继续"。
 - **字段**:feature / feature_name / requirement / current_ring / completed_rings /
-  skipped / gates(每环 cmd+exit+evidence)/ paths(spec_path、qa_flow_path)/
+  skipped / gates(每环 cmd+exit+evidence)/ paths(spec_path、qa_flow_path、requirement_path)/
   backprop_budget_left / config_changes(可选 string[]:quality.yml 变更或用户显式
-  接受的验证缺口,由主会话在 G0 处置 spec-definer 上报的 config_gaps 后写入)。
+  接受的验证缺口,由主会话在 G0 处置 spec-definer 上报的 config_gaps 后写入)/
+  human_review(可选 string|null:G0 人工规格卡点审计——string=主会话在用户确认规格后写入的
+  审查结论(如 "user approved: <feature> spec @<时间>"),null=未到/未过卡点;恢复时据此
+  判定 G0 人工审查是否已过,与机器门禁 gates 证据构成双轨审计)。
   由 CLI 子命令 `pipeline-state` 读写并校验 schema,防止主会话手写漂移;机读 JSON
   亦人类可读,即审计轨迹(补 git 在非 git 项目下的空缺)。
 - **写入时机**:与 §6 阶段提交并行——每环门禁通过后主会话更新。

@@ -49,6 +49,20 @@ const GOOD_QA =
   "# QA 流程:示例功能\n## 前置条件\n- 系统已启动\n## 步骤\n| 步骤 | 操作 | 预期结果 |\n| 1 | 执行校验 | 校验通过 |\n";
 const BAD_QA = "无标题无小节";
 
+const GOOD_REQ =
+  "# 需求: 示例功能\n## 验收项\n- [R1] 校验输入数据\n- [R2] 校验通过后输出结果\n";
+const GOOD_SPEC_TRACE =
+  "# language: zh-CN\n功能: 示例功能\n  @R1\n  场景: 校验输入\n    假如 存在输入数据\n    当 执行校验\n    那么 校验通过\n  @R2\n  场景: 输出结果\n    假如 校验通过\n    当 读取结果\n    那么 输出结果\n";
+const SPEC_R1_ONLY =
+  "# language: zh-CN\n功能: 示例功能\n  @R1\n  场景: 校验输入\n    假如 存在输入数据\n    当 执行校验\n    那么 校验通过\n";
+const SPEC_MULTI_R =
+  "# language: zh-CN\n功能: 示例功能\n  @R1 @R2\n  场景: 校验输入\n    假如 存在输入数据\n    当 执行校验\n    那么 校验通过\n";
+const REQ_DEFERRED =
+  "# 需求: 示例功能\n## 验收项\n- [R1] 校验输入数据\n- [R2] 不做: 批量操作超出本阶段范围\n";
+const REQ_BAD_DEFER =
+  "# 需求: 示例功能\n## 验收项\n- [R1] 不做:\n- [R2] 校验输出\n";
+const REQ_NO_SECTION = "# 需求: 示例功能\n没有验收项小节\n";
+
 /* ============================== 单元层:gates.ts 纯函数 ============================== */
 
 describe("src/gates.ts 单元层", () => {
@@ -79,6 +93,139 @@ describe("src/gates.ts 单元层", () => {
   test("specCheck 文件缺失 exit=2(参数/环境错误)", () => {
     const r = specCheck("/nonexistent/spec.feature", "/nonexistent/qa.md");
     expect(r.exitCode).toBe(2);
+  });
+
+  test("specCheck 带 requirement 好样例(双向闭环)exit=0 且输出覆盖统计", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("good.feature", GOOD_SPEC_TRACE);
+      const qa = fx.write("good-qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", GOOD_REQ);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(0, r.lines.join("\n"));
+      expect(r.lines.some((l) => l.startsWith("PASS"))).toBe(true);
+      expect(r.lines.some((l) => l.includes("coverage: 需求验收项 2 = 覆盖 2"))).toBe(true);
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 孤儿验收项 exit=1(需求被裁剪)", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", SPEC_R1_ONLY);
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", GOOD_REQ);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(1);
+      const joined = r.lines.join("\n");
+      expect(joined).toContain("验收项 R2 无对应场景(孤儿验收项");
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 孤儿场景(场景无 @R 标签)exit=1", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", GOOD_SPEC); // 无任何 @R 标注
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", GOOD_REQ);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(1);
+      expect(r.lines.join("\n")).toContain("无 @R<n> 验收项标注(孤儿场景");
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 场景引用不存在的验收项 exit=1", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", SPEC_R1_ONLY.replace("@R1", "@R9"));
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", GOOD_REQ);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(1);
+      expect(r.lines.join("\n")).toContain("引用了需求中不存在的验收项 R9");
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 场景引用已不做的验收项 exit=1", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", SPEC_R1_ONLY.replace("@R1", "@R2"));
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", REQ_DEFERRED);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(1);
+      const joined = r.lines.join("\n");
+      expect(joined).toContain("引用了已标注不做的验收项 R2");
+      expect(joined).toContain("验收项 R1 无对应场景(孤儿验收项");
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 不做无理由 exit=1", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", SPEC_R1_ONLY);
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", REQ_BAD_DEFER);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(1);
+      expect(r.lines.join("\n")).toContain("验收项 R1 标注不做但未给理由");
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 缺验收项小节 exit=1", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", SPEC_R1_ONLY);
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", REQ_NO_SECTION);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(1);
+      expect(r.lines.join("\n")).toContain("缺少 '## 验收项' 小节");
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck requirement 文件缺失 exit=2", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("good.feature", GOOD_SPEC_TRACE);
+      const qa = fx.write("good-qa.md", GOOD_QA);
+      const r = specCheck(spec, qa, undefined, "/nonexistent/requirement.md");
+      expect(r.exitCode).toBe(2);
+      expect(r.lines.join("\n")).toContain("FAIL [requirement]");
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 一场景对应多验收项 exit=0(多标签)", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", SPEC_MULTI_R);
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", GOOD_REQ);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(0, r.lines.join("\n"));
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 显式不做项豁免孤儿判定 exit=0(不做的验收项无需场景)", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("spec.feature", SPEC_R1_ONLY);
+      const qa = fx.write("qa.md", GOOD_QA);
+      const req = fx.write("requirement.md", REQ_DEFERRED);
+      const r = specCheck(spec, qa, undefined, req);
+      expect(r.exitCode).toBe(0, r.lines.join("\n"));
+      expect(r.lines.some((l) => l.includes("显式不做 1"))).toBe(true);
+    } finally { fx.cleanup(); }
+  });
+
+  test("specCheck 无 requirement 参数时旧行为不破坏(无标签 spec 照常通过)", () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("good.feature", GOOD_SPEC);
+      const qa = fx.write("good-qa.md", GOOD_QA);
+      const r = specCheck(spec, qa);
+      expect(r.exitCode).toBe(0);
+      expect(r.lines.some((l) => l.startsWith("PASS"))).toBe(true);
+    } finally { fx.cleanup(); }
   });
 
   test("crapCheck 无效阈值 exit=2", () => {
@@ -232,6 +379,46 @@ describe("src/gates.ts 单元层", () => {
     const r = pipelineState("update", ["/tmp/x.json", '{"feature":"a","current_ring":"coder","completed_rings":[],"config_changes":"not-array"}']);
     expect(r.exitCode).toBe(2);
   });
+
+  test("pipelineState update human_review 合法 string 写入后回读一致", () => {
+    const fx = makeFixture();
+    try {
+      const state = join(fx.dir, ".scratch", "demo", "pipeline-state.json");
+      const valid = JSON.stringify({
+        feature: "demo",
+        current_ring: "coder",
+        completed_rings: ["spec"],
+        human_review: "user approved: demo spec @2026-10-14",
+      });
+      const w = pipelineState("update", [state, valid]);
+      expect(w.exitCode).toBe(0, w.lines.join("\n"));
+      const r = pipelineState("read", [state]);
+      expect(r.exitCode).toBe(0);
+      const parsed = JSON.parse(r.lines.join("\n"));
+      expect(parsed.human_review).toBe("user approved: demo spec @2026-10-14");
+    } finally { fx.cleanup(); }
+  });
+
+  test("pipelineState update human_review null 合法(G0 卡点未过/未到)", () => {
+    const fx = makeFixture();
+    try {
+      const state = join(fx.dir, ".scratch", "demo", "pipeline-state.json");
+      const valid = JSON.stringify({
+        feature: "demo",
+        current_ring: "coder",
+        completed_rings: ["spec"],
+        human_review: null,
+      });
+      const w = pipelineState("update", [state, valid]);
+      expect(w.exitCode).toBe(0, w.lines.join("\n"));
+    } finally { fx.cleanup(); }
+  });
+
+  test("pipelineState update human_review 类型错误 exit=2", () => {
+    const r = pipelineState("update", ["/tmp/x.json", '{"feature":"a","current_ring":"coder","completed_rings":[],"human_review":123}']);
+    expect(r.exitCode).toBe(2);
+    expect(r.lines.join("\n")).toContain("human_review");
+  });
 });
 
 /* ============================== 集成层:官方 loadExtensions 通道 ============================== */
@@ -298,6 +485,51 @@ describe("extension 集成层(loadExtensions 官方加载器)", () => {
       const { text, exitCode } = await executeTool("qa_spec_check", { spec_path: spec, qa_flow_path: qa });
       expect(exitCode).toBe(0);
       expect(text).toContain("PASS");
+    } finally { fx.cleanup(); }
+  });
+
+  test("qa_spec_check 带 requirement_path 好样例(需求一致性闭环)exit=0", async () => {
+    const fx = makeFixture();
+    try {
+      const req = fx.write("requirement.md", GOOD_REQ);
+      const spec = fx.write("good.feature", GOOD_SPEC_TRACE);
+      const qa = fx.write("good-qa.md", GOOD_QA);
+      const { text, exitCode } = await executeTool("qa_spec_check", {
+        spec_path: spec,
+        qa_flow_path: qa,
+        requirement_path: req,
+      });
+      expect(exitCode).toBe(0, text);
+      expect(text).toContain("PASS");
+      expect(text).toContain("coverage: 需求验收项 2");
+    } finally { fx.cleanup(); }
+  });
+
+  test("qa_spec_check 带 requirement_path 坏样例(孤儿验收项)exit=1", async () => {
+    const fx = makeFixture();
+    try {
+      const req = fx.write("requirement.md", GOOD_REQ);
+      const spec = fx.write("spec.feature", SPEC_R1_ONLY); // R2 无场景 → 孤儿验收项
+      const qa = fx.write("qa.md", GOOD_QA);
+      const { text, exitCode } = await executeTool("qa_spec_check", {
+        spec_path: spec,
+        qa_flow_path: qa,
+        requirement_path: req,
+      });
+      expect(exitCode).toBe(1, text);
+      expect(text).toContain("验收项 R2 无对应场景");
+    } finally { fx.cleanup(); }
+  });
+
+  test("qa_spec_check 不带 requirement_path 时旧行为不变(无标签 spec 通过)", async () => {
+    const fx = makeFixture();
+    try {
+      const spec = fx.write("good.feature", GOOD_SPEC);
+      const qa = fx.write("good-qa.md", GOOD_QA);
+      const { text, exitCode } = await executeTool("qa_spec_check", { spec_path: spec, qa_flow_path: qa });
+      expect(exitCode).toBe(0, text);
+      expect(text).toContain("PASS");
+      expect(text).not.toContain("coverage: 需求验收项");
     } finally { fx.cleanup(); }
   });
 

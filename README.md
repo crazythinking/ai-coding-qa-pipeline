@@ -45,7 +45,7 @@ omp plugin install ai-coding-qa-pipeline        # 发布后(npm):agents/skills/t
 
 | 门禁 | extension 工具(推荐) | 等价 CLI |
 |---|---|---|
-| G0 规格 | `qa_spec_check` `spec_path`+`qa_flow_path` | `ai-coding-qa-pipeline spec-check <spec.feature> <qa-flow.md>` |
+| G0 规格 | `qa_spec_check` `spec_path`+`qa_flow_path`+`requirement_path`(可选,传则校验需求一致性) | `ai-coding-qa-pipeline spec-check [--requirement <requirement.md>] <spec.feature> <qa-flow.md>` |
 | CRAP 复杂度 | `qa_crap_check` `threshold`(可选)+`paths`(可选) | `ai-coding-qa-pipeline crap-check [--threshold N] [paths...]` |
 | 环境冒烟 | `qa_doctor` `quality_yml_path`(可选) | `ai-coding-qa-pipeline doctor [quality.yml路径]` |
 | 编排状态 | `qa_pipeline_state` `op`+`state_path`(+`json`) | `ai-coding-qa-pipeline pipeline-state read\|update <state.json> [json]` |
@@ -71,7 +71,7 @@ omp plugin install ai-coding-qa-pipeline        # 发布后(npm):agents/skills/t
 
 ```yaml
 spec:                                    # G0 规格门禁(主会话派发 spec-definer 后亲自跑)
-  check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}
+  check: ai-coding-qa-pipeline spec-check --requirement {requirement_path} {spec_path} {qa_flow_path}
 languages:
   python:
     test: pytest {diff_test_paths} -q
@@ -83,8 +83,13 @@ quality.yml 命令字符串仍是协议事实源(doctor 按首词查在位性、
 
 占位符由主会话执行门禁时注入,quality.yml 对所有 feature 稳定、不写死具体文件路径:
 
-- `{spec_path}`/`{qa_flow_path}` — 主会话从 spec-definer 的 output schema 代入
+- `{requirement_path}`/`{spec_path}`/`{qa_flow_path}` — 主会话从 spec-definer 的 output schema 代入
 - `{diff_source_paths}`/`{diff_test_paths}` — 主会话执行前从 `git diff` 计算本次 feature 的源码/测试文件集代入
+
+`--requirement`(或工具参数 `requirement_path`)令 G0 追加**需求一致性校验**:spec-definer 产出的
+`requirement.md`(`## 验收项` 小节 `- [Rn] …`,显式延后用 `- [Rn] 不做: <理由>`)与 spec.feature 场景的
+`@R<n>` 标签双向闭环——孤儿验收项(需求被裁剪)与孤儿场景(无需求来源)均 exit=1。既有 quality.yml
+不带该参数时行为不变(向后兼容)。
 
 ## 验证(官方通道,离线确定性)
 

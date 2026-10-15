@@ -45,7 +45,7 @@ description: Use when initializing ai-coding-qa-pipeline quality gates for a pro
 
 | 占位符 | 含义 | 由谁注入 |
 |---|---|---|
-| `{spec_path}` / `{qa_flow_path}` | 本次 spec-definer 产出的规格/QA流程路径 | 主会话从 spec-definer output 代入 |
+| `{requirement_path}` / `{spec_path}` / `{qa_flow_path}` | 本次 spec-definer 产出的需求基线/规格/QA流程路径 | 主会话从 spec-definer output 代入 |
 | `{diff_source_paths}` | 本次 feature diff 的源码文件(非测试) | 主会话执行门禁前从 `git diff` 计算 |
 | `{diff_test_paths}` | 本次 feature diff 的测试文件 | 同上 |
 
@@ -60,7 +60,7 @@ architect_signal:      # architect 派发阈值(§6 触发信号)
   modules_touched: 3   # 触碰顶层模块数≥3
 e2e: cli               # 可用验证面(默认面): cli|http|playwright|null;支持多值(YAML 数组/逗号分隔,如 [cli, playwright]);null=G4跳过,终点G3
 spec:                  # G0 规格门禁(主会话派发 spec-definer 后亲自跑)
-  check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}
+  check: ai-coding-qa-pipeline spec-check --requirement {requirement_path} {spec_path} {qa_flow_path}
 languages:
   python:
     test: pytest {diff_test_paths} -q

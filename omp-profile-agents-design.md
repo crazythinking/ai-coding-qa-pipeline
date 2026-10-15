@@ -52,7 +52,7 @@
 要点:
 
 - **6个agent均`blocking: true`且不设`spawns`**(流水线推进权只在主会话,agent本身不能再派生,防失控)。常见路径5环(architect跳过),大变更时6环。
-- **产物交接面**:`.scratch/<feature>/`(spec.feature、qa-flow.md、门禁报告),规格短暂性——不进版本库。
+- **产物交接面**:`.scratch/<feature>/`(requirement.md、spec.feature、qa-flow.md、门禁报告),规格短暂性——不进版本库。
 - **架构约束**(import-linter/ArchUnit等)作为门禁命令列入quality.yml的`arch`,G1/G2/G5复跑,违反即失败——agent必须修,无"建议"空间;约束文件由人类掌管,architect修改时人类在下一环前知悉。
 - **模型分档**经`model:`角色别名映射到现有omniroute池(§4),认证经`~/.omp/.env`全局生效。
 
@@ -63,26 +63,39 @@
 ```markdown
 ---
 name: spec-definer
-description: 将需求文档转换为Gherkin规格和QA流程文档。在需要对需求建立机器可验证规格时使用。
+description: 将需求文档(须含本阶段落地清单)转换为需求基线、Gherkin规格和QA流程文档。在需要对需求建立机器可验证规格时使用。
 model: "@slow"
 tools: read, write
 blocking: true
 ---
-将需求文档转换为两份文件:
-1. spec.feature — Gherkin格式,每个场景必须包含前置条件、操作步骤、预期结果。
-2. qa-flow.md — 从用户视角描述界面操作序列与验证点,每步确定性、可重复。
+将需求文档转换为三份文件:
+1. requirement.md — 需求基线:`## 验收项` 小节逐条列 `- [Rn] 描述`(输入文档显式声明"本阶段不做"的
+   写 `- [Rn] 不做: <理由>`),每条验收项来自输入文档落地清单,不裁剪不创造。
+2. spec.feature — Gherkin格式,每个场景必须包含前置条件、操作步骤、预期结果,并带 `@R<n>` 标签
+   (写在其所属 `场景:` 行之前);一个场景可对应多个验收项。
+3. qa-flow.md — 从用户视角描述界面操作序列与验证点,每步确定性、可重复。
 只描述行为和预期结果,不写任何实现细节(不提数据库、API、组件)。
 输出目录:.scratch/<feature>/
 ```
 
-- `output:` schema:`{spec_path, qa_flow_path, scenario_count, config_gaps[]}`
+- `output:` schema:`{spec_path, qa_flow_path, requirement_path, scenario_count, config_gaps[]}`
   - `config_gaps`(2026-10-13 增设):`{language, evidence, missing[], uncertain}`——需求隐含
     技术栈在 quality.yml 无门禁覆盖时的上报项(如需求含前端/Playwright 而 quality.yml 只有
     python);`uncertain: true` = 证据不足语言栈未定。**spec-definer 只上报不处置、不因门禁
     缺失裁剪需求**;处置权在主会话 G0 卡点(选项 A 按 lang-profiles 补 languages 段 + doctor;
     选项 B 用户显式接受缺口;均写入 pipeline-state `config_changes`)。
+  - `requirement_path`(2026-10-14 增设):需求一致性校验的需求基线路径。
 - 门禁G0(2026-09-16增设,修订原"无门禁(人类审规格即门禁)"):格式由命令机器卡,**人类审规格降级为纯语义卡点**(L3)
-  - 单命令:`ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}`(插件ai-coding-qa-pipeline的全局CLI,内部用官方@cucumber/gherkin解析:L1语法+L2结构+qa-flow模板一体;零项目路径)
+  - 单命令:`ai-coding-qa-pipeline spec-check [--requirement {requirement_path}] {spec_path} {qa_flow_path}`(插件ai-coding-qa-pipeline的全局CLI,内部用官方@cucumber/gherkin解析:L1语法+L2结构+qa-flow模板一体;零项目路径)
+  - 需求一致性(2026-10-14 增设,防需求被裁剪):传 `--requirement` 时校验 requirement.md 验收项
+    ↔ spec.feature 场景 `@R<n>` 标签**双向闭环**——孤儿验收项(需求被裁剪,无场景)、孤儿场景
+    (无需求来源)、引用不存在的验收项、引用已"不做"验收项、`不做` 无理由、验收项小节缺失/格式错,
+    任一即 exit=1。既有不带 `--requirement` 的 quality.yml 行为不变(向后兼容)。
+  - 人工卡点(L3,唯一必经;2026-10-14 强化):机器门禁通过后主会话**陈列审查材料**
+    (requirement.md 验收项逐条清单 + 每场景 `@R` 映射 + qa-flow 步骤摘要)请用户核对两问——
+    ① 验收项是否齐全(需求是否被裁剪)② 场景预期是否符合需求语义;机器 FAIL 与人类驳回分开计数
+    (机器 FAIL 计入连续 3 次失败预算,人审驳回不占预算但往返限 3 轮);人审通过后主会话写
+    pipeline-state `human_review: "user approved: <feature> spec @<时间>"` 落审计。
   - scenario_count 对账:spec-check输出 `scenario_count=N`,主会话与agent自报值比对,不一致即门禁失败(防谎报)
   - 演变(2026-09-16):初版为两条命令(gherkin-utils全局安装 + 仓库内spec_check.py),插件化时合并进插件CLI
   - 选型教训:`gherkin-lint` 无`.gherkin-lintrc`时**exit=0零检查**放行一切,弃用;`gherkin-utils --no-ansi`在12.x不存在致好文件也exit=1;门禁命令必须实测过合法/非法两路才准入
@@ -225,7 +238,8 @@ architect_signal:      # architect派发阈值(§6触发信号)
 e2e: cli               # 项目可用验证面集合(默认面): cli|http|playwright|null,支持多值(YAML数组/逗号分隔);null=G4跳过,终点G3
                        # feature 级 G4 实际面按该 feature 的 qa-flow 交互面选,超出声明集合与用户确认(2026-10-13 定多值)
 spec:                  # G0规格门禁(spec-definer产出,主会话派发后、人类审查前亲自跑;见§3①)
-  check: ai-coding-qa-pipeline spec-check {spec_path} {qa_flow_path}   # 插件CLI,全局可用:L1+L2+qa-flow模板
+  check: ai-coding-qa-pipeline spec-check --requirement {requirement_path} {spec_path} {qa_flow_path}
+                       # 插件CLI,全局可用:L1+L2+qa-flow模板+需求一致性(requirement.md验收项↔场景@R<n>标签双向闭环,2026-10-14)
 languages:
   python:
     test: pytest {diff_test_paths} -q            # 占位符见下方约定;主会话执行前从git diff注入
@@ -249,7 +263,7 @@ languages:
 
 | 占位符 | 含义 | 注入者 |
 |---|---|---|
-| `{spec_path}` / `{qa_flow_path}` | 本次 spec-definer 产出的规格/QA流程路径 | 主会话从 spec-definer output 代入 |
+| `{requirement_path}` / `{spec_path}` / `{qa_flow_path}` | 本次 spec-definer 产出的需求基线/规格/QA流程路径 | 主会话从 spec-definer output 代入 |
 | `{diff_source_paths}` | 本次 feature diff 的源码文件(非测试) | 主会话执行门禁前从 `git diff` 计算代入 |
 | `{diff_test_paths}` | 本次 feature diff 的测试文件 | 同上 |
 
@@ -342,7 +356,9 @@ architect触发信号(确定性检测,任一命中即派发,均无则跳过):
     `ai-coding-qa-pipeline pipeline-state update <json>`(schema校验)落盘;`read` 回读。
   - 字段:feature / feature_name / requirement / current_ring(下一环)/
     completed_rings / skipped / gates(每环 cmd+exit+evidence)/ paths(spec_path、
-    qa_flow_path)/ backprop_budget_left。
+    qa_flow_path、requirement_path)/ backprop_budget_left /
+    config_changes / human_review(G0 人工规格卡点审计,string|null:主会话在用户确认
+    规格后写入 "user approved: <feature> spec @<时间>",2026-10-14 增设)。
   - 作用:会话中断(clear/换会话/进程退出)后,主会话 `pipeline-state read` 恢复——
     报告"已到<环>,下一环<环>",从下一环续跑,不重来。恢复粒度=环间续跑,不承诺环内
     (环是fresh子代理,环内失败已靠失败报告交接)。
@@ -358,7 +374,7 @@ architect触发信号(确定性检测,任一命中即派发,均无则跳过):
 
 关键:**门禁由主会话亲自执行命令验证**,不采信子代理自报结果——编排者与执行者分离,与文档"不信任Agent自觉性"原则一致。
 执行前,主会话从 `git diff` 计算本次 feature 的 diff 文件集,注入命令占位符
-`{diff_source_paths}`/`{diff_test_paths}`(见§5);`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。
+`{diff_source_paths}`/`{diff_test_paths}`(见§5);`{requirement_path}`/`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。
 
 ## 7. 分发架构(独立插件项目,2026-09-16重构)
 
@@ -370,14 +386,14 @@ v2定稿为:可复用件全部收进独立插件项目`ai-coding-qa-pipeline`(gi
 ai-coding-qa-pipeline/(独立插件项目,~/apps/ai-coding-qa-pipeline)
 ├── package.json              # name=ai-coding-qa-pipeline;omp插件清单;bin入口(ai-coding-qa-pipeline)
 ├── agents/                   # 6个agent定义,随插件全局分发(发现顺序:项目>用户>插件根)
-│   ├── spec-definer.md       #   正文含 qa-flow 模板 + spec.feature 骨架(与校验器 REQUIRED_QA_HEADER 同步)
+│   ├── spec-definer.md       #   正文含 requirement.md 模板 + qa-flow 模板 + spec.feature 骨架(与校验器 REQUIRED_QA_HEADER 同步)
 │   ├── coder.md              #   autoload-skills: coder-playbook
 │   ├── cleaner.md            #   autoload-skills: cleaner-playbook
 │   ├── architect.md          # 有条件派发(§6触发信号);无 playbook
 │   ├── reinforcer.md         #   autoload-skills: reinforcer-playbook
 │   └── qa-runner.md          #   autoload-skills: qa-runner-playbook
 ├── bin/ai-coding-qa-pipeline.ts       # 门禁CLI(bun运行;@cucumber/gherkin官方解析器,零项目路径)
-│   ├── spec-check <spec> <qa-flow>   # G0:L1语法+L2结构+qa-flow模板+scenario_count对账
+│   ├── spec-check [--requirement <req.md>] <spec> <qa-flow>   # G0:L1语法+L2结构+qa-flow模板+需求一致性(2026-10-14)+scenario_count对账
 │   ├── crap-check [--threshold N] [paths...]  # CRAP组合器(radon+coverage,自不解析源码)
 │   └── doctor [quality.yml]        # §5.1冒烟验证命令化:按声明查门禁工具在位性(缺失给安装提示/缺配置引导)
 ├── skills/                   # 技能,随插件分发(/extensions 可审计)
