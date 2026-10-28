@@ -19,7 +19,7 @@ agent 正文只引用项目级 `.omp/quality.yml`(不写死路径);门禁由插�
 ## 安装(每台 omp 实例一次,一步到位)
 
 ```bash
-omp plugin install ai-coding-qa-pipeline        # 发布后(npm):agents/skills/tools 全部就位,免 bun link
+omp plugin install github:crazythinking/ai-coding-qa-pipeline   # GitHub 源:agents/skills/tools 全部就位,免 bun link
 # 本地 tarball / 目录: omp plugin install /path/to/ai-coding-qa-pipeline-0.1.0.tgz
 ```
 
@@ -59,7 +59,7 @@ omp plugin install ai-coding-qa-pipeline        # 发布后(npm):agents/skills/t
 
 | 依赖 | 归属 | 缺失处理 |
 |---|---|---|
-| 插件自身(@cucumber/gherkin、yaml、bun 运行时) | 随插件 `bun install`(npm 分发时自动) | CLI/工具起不来=环境错误,重装插件依赖 |
+| 插件自身(@cucumber/gherkin、yaml、bun 运行时) | 随插件 `bun install`(GitHub 源安装时自动) | CLI/工具起不来=环境错误,重装插件依赖 |
 | 机器级门禁工具(pytest/mutmut/radon/coverage/bats/shellcheck/mvn…) | **不随插件分发**,由各项目 quality.yml 声明 | `qa_doctor`(或 CLI doctor)逐条检查并给安装提示;运行期门禁 exit=2=环境问题 |
 | 语言工具链差异 | quality.yml 声明式适配(java→mvn,shell→bats),插件零语言假设 | doctor 按声明检查,哪条缺失报哪条 |
 
@@ -103,7 +103,7 @@ quality.yml 命令字符串仍是协议事实源(doctor 按首词查在位性、
 2. **集成层**:用官方 `loadExtensions()`(来自 `@oh-my-pi/pi-coding-agent/extensibility/extensions`)
    加载插件 extension,断言无加载错误 + 4 个门禁工具注册,然后直接调用每个工具的
    `ToolDefinition.execute()`(不经 LLM、离线、确定性),断言返回内容与 exitCode 与 CLI 语义一致;
-3. **安装层(发布冒烟)**:npm 分发时 `omp plugin install <npm包名>` —— omp 官方
+3. **安装层(发布冒烟)**:GitHub 分发时 `omp plugin install github:crazythinking/ai-coding-qa-pipeline` —— omp 官方
    `validateInstalledExtensions` 在安装时即验证 extension 可解析/import/初始化,失败自动回滚;
    本地改动副本不重装,对副本跑集成层 loadExtensions 等效验证(见"开发"节)。
 
@@ -118,7 +118,7 @@ bun run verify                 # 单元层 + 集成层全绿才可发布
 
 - 改 agent 正文 / extension / skill 后:重打 tarball 解包覆盖安装副本
   `~/.omp/plugins/node_modules/ai-coding-qa-pipeline/`(实测:omp 18.x `omp plugin install` 对
-  本地路径走 link、tarball 参数会被当目录读而 ENOTDIR;仅 npm 分发支持干净重装),之后用
+  本地路径走 link、tarball 参数会被当目录读而 ENOTDIR;仅外部源(GitHub/npm)分发支持干净重装),之后用
   `bun run verify` 的集成层对副本 loadExtensions 验证(load errors=0 + 4 工具注册);或重启
   会话使发现刷新。
 - 门禁逻辑在 `src/gates.ts`(单一事实源),`bin/` 薄壳与 `extensions/index.ts` 都复用它;改门禁只改 gates.ts。

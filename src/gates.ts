@@ -409,7 +409,7 @@ export const INSTALL_HINTS: Record<string, string> = {
   shellcheck: "apt install shellcheck / brew install shellcheck",
   mvn: "apt install maven / sdk install maven",
   "gherkin-utils": "bun add -g @cucumber/gherkin-utils",
-  "ai-coding-qa-pipeline": "omp plugin install ai-coding-qa-pipeline(本插件自带门禁,无需独立安装)",
+  "ai-coding-qa-pipeline": "omp plugin install github:crazythinking/ai-coding-qa-pipeline(本插件自带门禁,无需独立安装)",
 };
 
 interface GateEntry {

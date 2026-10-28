@@ -384,7 +384,7 @@ architect触发信号(确定性检测,任一命中即派发,均无则跳过):
 ## 7. 分发架构(独立插件项目,2026-09-16重构)
 
 **重构动机**:可复用件(spec_check/crap_check)曾放项目仓库,只在本项目有效;换项目即废。
-v2定稿为:可复用件全部收进独立插件项目`ai-coding-qa-pipeline`(git管理,可发布 npm 或市场分发),
+v2定稿为:可复用件全部收进独立插件项目`ai-coding-qa-pipeline`(git管理,经 GitHub 源安装或市场分发),
 项目只保留声明与产物。
 
 ```
@@ -412,7 +412,7 @@ ai-coding-qa-pipeline/(独立插件项目,~/apps/ai-coding-qa-pipeline)
 └── README.md                 # 安装/升级/使用说明(+quality.yml模板)
 
 安装(每台目标机的omp实例,一次,一步到位):
-  omp plugin install ai-coding-qa-pipeline       # 发布后(npm):agents/skills/门禁工具全部就位,免 bun link
+  omp plugin install github:crazythinking/ai-coding-qa-pipeline   # GitHub 源:agents/skills/门禁工具全部就位,免 bun link
   # 本地: omp plugin install /path/to/ai-coding-qa-pipeline-0.1.0.tgz
   插件 extension 注册 4 个门禁工具(qa_spec_check/qa_crap_check/qa_doctor/qa_pipeline_state),
   主会话会话内直接调用,无需 CLI 进 PATH;CLI 为等价薄壳供独立场景回退。
