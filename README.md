@@ -76,7 +76,7 @@ languages:
   python:
     test: pytest {diff_test_paths} -q
     complexity: ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}
-    mutation: mutmut run --paths-to-mutate={diff_source_paths}
+    mutation: mutmut run    # 全量变异;3.x 移除 --paths-to-mutate,diff 范围由主会话跑后核对
 ```
 
 quality.yml 命令字符串仍是协议事实源(doctor 按首词查在位性、CLI 可独立执行);主会话在会话内**优先用等价工具**(`qa_spec_check`/`qa_crap_check`/`qa_doctor`)执行同一门禁,占位符实参直接作为工具参数。
@@ -85,6 +85,10 @@ quality.yml 命令字符串仍是协议事实源(doctor 按首词查在位性、
 
 - `{requirement_path}`/`{spec_path}`/`{qa_flow_path}` — 主会话从 spec-definer 的 output schema 代入
 - `{diff_source_paths}`/`{diff_test_paths}` — 主会话执行前从 `git diff` 计算本次 feature 的源码/测试文件集代入
+
+列表型占位符的**注入分隔符与根相对转换**按目标工具 CLI 语义决定:`{diff_source_paths}` 默认空格分隔
+(crap-check/shellcheck/depcruise);stryker `--mutate` 为逗号分隔。命令含 `cd <项目根>` 时,该 gate
+的 diff 集 = `git diff` 落在该项目根下的文件,注入值转项目根相对(剥掉 cd 前缀);cd 目标是仓库根时剥前缀为空操作。
 
 `--requirement`(或工具参数 `requirement_path`)令 G0 追加**需求一致性校验**:spec-definer 产出的
 `requirement.md`(`## 验收项` 小节 `- [Rn] …`,显式延后用 `- [Rn] 不做: <理由>`)与 spec.feature 场景的

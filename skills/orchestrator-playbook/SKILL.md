@@ -71,7 +71,7 @@ qa_pipeline_state  op=read state_path=<state.json>
   - `qa_pipeline_state` — 编排状态读/写(参数 `op` + `state_path` + `json`)
   工具与 CLI 共享同一套核心逻辑(src/gates.ts),退出码语义一致。quality.yml 里的命令字符串仍保留
   作为协议事实源与独立 CLI 场景;插件已装时主会话**优先用工具**,命令字符串仅在无工具环境回退。
-- **占位符注入**:执行前从 `git diff` 计算本次 feature 的 diff 文件集,注入 `{diff_source_paths}`(源码,非测试)/ `{diff_test_paths}`(测试);`{requirement_path}`/`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。占位符集为空 → 整目录兜底或跳过,报告中说明。工具调用时把占位符实参直接作为工具参数。
+- **占位符注入**:执行前从 `git diff` 计算本次 feature 的 diff 文件集,注入 `{diff_source_paths}`(源码,非测试)/ `{diff_test_paths}`(测试);`{requirement_path}`/`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。占位符集为空 → 整目录兜底或跳过,报告中说明。工具调用时把占位符实参直接作为工具参数。**列表占位符按目标工具 CLI 语义注入分隔符与根相对**:`{diff_source_paths}` 默认空格;stryker `--mutate` 逗号;命令含 `cd <项目根>` 时 diff 集=落在该项目根内的文件,注入值剥前缀转项目根相对(cd=仓库根为空操作)。
 - **退出码语义**:0=通过;1=不合格(该环失败,同环重试/回传);2=环境问题(工具缺失,不重试 agent,装工具或置 null 后重跑)。工具返回的 `details.exitCode` 即该语义。
 
 ## 写编排状态(每环通过后,ADR-0001)

@@ -11,12 +11,16 @@ pipeline-setup 技能第 0 步探测时引用。**全部为"建议,非断言"**�
 由主会话执行门禁前从 git diff 注入;`{requirement_path}`/`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入),
 **不写死具体文件路径**——这样 quality.yml 对所有 feature 稳定。空集时主会话用整目录兜底或跳过并在报告中说明。
 
+列表型占位符的**注入分隔符与根相对转换**按目标工具 CLI 语义决定:`{diff_source_paths}` 默认空格分隔参数
+(crap-check/radon、shellcheck、depcruise);**stryker `--mutate` 为逗号分隔**。命令含 `cd <项目根>` 时,该 gate 的 diff 集 = `git diff` 落在该项目根下的文件,注入值转
+项目根相对(剥掉 cd 前缀);cd 目标是仓库根时剥前缀为空操作。
+
 | 语言 | 构建文件 | test | coverage | complexity | mutation | arch/lint |
 |---|---|---|---|---|---|---|
-| python | pyproject.toml / setup.py / requirements.txt | `pytest {diff_test_paths} -q` | `coverage run -m pytest {diff_test_paths}` | `ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}` | `mutmut run --paths-to-mutate={diff_source_paths}` | `lint-imports`(import-linter 契约) |
+| python | pyproject.toml / setup.py / requirements.txt | `pytest {diff_test_paths} -q` | `coverage run -m pytest {diff_test_paths}` | `ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}` | `mutmut run`(全量变异;3.x 移除 `--paths-to-mutate`,路径走 config `[mutmut] source_paths=src/`,diff 范围由主会话跑后核对) | `lint-imports`(import-linter 契约) |
 | shell | — | `bats {diff_test_paths}` | `null` | `null`(shell 无通用复杂度工具,该维度门禁不启用;复杂 shell 用 shellcheck lint 兜底) | `null`(二期选型) | `shellcheck {diff_source_paths}` |
 | java | pom.xml / build.gradle | `mvn -q test` | `mvn -q org.jacoco:jacoco-maven-plugin:check` | `mvn -q pmd:check`(cyclomatic/NPath,ruleset 用 templates/pmd-ruleset.xml 落地) | `mvn -q org.pitest:pitest-maven:mutationCoverage -DwithHistory` | `mvn -q arch-unit` |
-| typescript | package.json / tsconfig.json | `npm test` | `vitest run --coverage`(jest/其他框架按其 CLI) | `eslint --rule 'complexity: [error, 10]' {diff_source_paths}`(eslint 内置 cyclomatic 规则) | `stryker run` | `depcruise {diff_source_paths}`(dependency-cruiser 依赖约束)/ `eslint {diff_source_paths}` lint |
+| typescript | package.json / tsconfig.json | `npm test` | `vitest run --coverage`(jest/其他框架按其 CLI) | `eslint --rule 'complexity: [error, 10]' {diff_source_paths}`(eslint 内置 cyclomatic 规则) | `cd <前端根> && npx stryker run --mutate "{diff_source_paths}"`(注入值=前端根相对、逗号分隔;变异范围只达本次 diff,conf 默认全量仅裸跑兜底) | `depcruise {diff_source_paths}`(dependency-cruiser 依赖约束)/ `eslint {diff_source_paths}` lint |
 | go | go.mod | `go test ./...` | `go test -cover ./...` | `gocyclo -over 10 {diff_source_paths}`(Gocyclo 圈复杂度) | `gremlins` | `go vet {diff_source_paths}` / depguard |
 | rust | Cargo.toml | `cargo test` | `cargo llvm-cov` | `cargo clippy -- -W clippy::cognitive_complexity`(官方认知复杂度 lint) | `cargo-mutants` | `cargo clippy`(全量 lint) |
 

@@ -66,7 +66,7 @@ languages:
     test: pytest {diff_test_paths} -q
     coverage: coverage run -m pytest {diff_test_paths}
     complexity: ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}
-    mutation: mutmut run --paths-to-mutate={diff_source_paths}
+    mutation: mutmut run    # 全量变异;3.x 移除 --paths-to-mutate,diff 范围由主会话跑后核对(见 lang-profiles)
     arch: lint-imports
   shell:
     test: bats {diff_test_paths}
@@ -76,6 +76,7 @@ languages:
 
 - `{diff_source_paths}` / `{diff_test_paths}` 为空时(如 feature 只改测试),对应门禁用整目录兜底或跳过,主会话决策并在报告中说明。
 - 命令首词必须是可在 PATH 找到的工具(doctor 按此校验在位性)。
+- **列表占位符的注入分隔符与根相对转换**按目标工具 CLI 语义决定:`{diff_source_paths}` 默认空格分隔(stryker `--mutate` 为逗号分隔);命令含 `cd <项目根>` 时,该 gate 的 diff 集 = `git diff` 落在该项目根下的文件,注入值转项目根相对(剥掉 cd 前缀),cd 目标是仓库根时剥前缀为空操作。
 
 **落地门禁模板文件**(被选语言的门禁命令依赖的项目侧前置,与 quality.yml 一并落盘):
 
@@ -85,7 +86,7 @@ languages:
 |---|---|---|---|
 | `pmd-ruleset.xml` | java | `.pmd/ruleset.xml` | `mvn -q pmd:check` 需此 ruleset(cyclomatic/NPath 阈值);pom 需配 maven-pmd-plugin 指向(侧置,引导) |
 | `import-linter-setup.cfg` | python | `setup.cfg`(合并 `[tool:importlinter]`) | `lint-imports` 需契约;替换 `<pkg>` |
-| `stryker.conf.js` | typescript | `stryker.conf.js` | `stryker run` 需此配置;替换 `src/**` 与 testRunner |
+| `stryker.conf.js` | typescript | `stryker.conf.js` | 门禁走 `--mutate` 注入变异范围(见 lang-profiles);conf 保留默认全量仅裸跑兜底;替换 testRunner/mutator |
 | `dependency-cruiser.js` | typescript | `.dependency-cruiser.js` | `depcruise` 需此配置;规则按项目调整 |
 | `gremlins.yaml` | go | `.gremlins.yaml` | `gremlins` 需此配置;替换 `<module>` |
 | `depguard.yml` | go | `.depguard.yml` | `depguard` 需此配置;`<module>` 按 go.mod |

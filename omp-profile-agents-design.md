@@ -245,7 +245,7 @@ languages:
     test: pytest {diff_test_paths} -q            # 占位符见下方约定;主会话执行前从git diff注入
     coverage: coverage run -m pytest {diff_test_paths}
     complexity: ai-coding-qa-pipeline crap-check --threshold 6 {diff_source_paths}   # 插件组合器(见§7)
-    mutation: mutmut run --paths-to-mutate={diff_source_paths}
+    mutation: mutmut run    # 全量变异;3.x 移除 --paths-to-mutate,diff 范围由主会话跑后核对
     arch: lint-imports
   shell:
     test: bats {diff_test_paths}
@@ -269,6 +269,10 @@ languages:
 
 占位符集为空时(如 feature 只改测试):该门禁用整目录兜底或跳过,主会话决策并在报告中说明。
 命令首词须为 PATH 可寻工具(doctor 按此校验在位性)。
+
+**列表占位符的注入分隔符与根相对转换**按目标工具 CLI 语义决定:`{diff_source_paths}` 默认空格分隔
+(crap-check/shellcheck/depcruise);stryker `--mutate` 为逗号分隔。命令含 `cd <项目根>` 时,该 gate 的
+diff 集 = `git diff` 落在该项目根下的文件,注入值转项目根相对(剥掉 cd 前缀);cd 目标是仓库根时剥前缀为空操作。
 
 规则:
 
@@ -375,6 +379,7 @@ architect触发信号(确定性检测,任一命中即派发,均无则跳过):
 关键:**门禁由主会话亲自执行命令验证**,不采信子代理自报结果——编排者与执行者分离,与文档"不信任Agent自觉性"原则一致。
 执行前,主会话从 `git diff` 计算本次 feature 的 diff 文件集,注入命令占位符
 `{diff_source_paths}`/`{diff_test_paths}`(见§5);`{requirement_path}`/`{spec_path}`/`{qa_flow_path}` 由 spec-definer output 代入。
+列表占位符的**注入分隔符与根相对转换**(空格/逗号、`cd <项目根>` 前缀剥离)见 §5 占位符约定。
 
 ## 7. 分发架构(独立插件项目,2026-09-16重构)
 
